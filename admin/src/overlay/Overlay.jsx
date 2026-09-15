@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { t } from '../i18n';
 import { serverNow, send } from '../net/client';
 import { ROLE, STATUS } from '../pluginId';
 import { getState, toggleMuted, useGameStore } from '../store';
@@ -24,10 +25,16 @@ const secondsLeft = (deadline, now) => Math.max(0, Math.ceil((deadline - now) / 
 const formatClock = (seconds) =>
   `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-const roleLabel = {
-  [ROLE.SEEKER]: '🔦 Seeker',
-  [ROLE.HIDER]: '👻 Hider',
-  [ROLE.SPECTATOR]: '👁 Spectator',
+const roleLabel = (role) => {
+  if (role === ROLE.SEEKER) {
+    return `🔦 ${t('overlay.roleSeeker')}`;
+  }
+
+  if (role === ROLE.HIDER) {
+    return `👻 ${t('overlay.roleHider')}`;
+  }
+
+  return `👁 ${t('overlay.roleSpectator')}`;
 };
 
 const GhostLayer = () => {
@@ -45,11 +52,9 @@ const Hud = ({ me, game, now }) => {
 
   return (
     <div className="hns-hud">
-      <span>{roleLabel[me.role] ?? '👁 Spectator'}</span>
+      <span>{roleLabel(me.role)}</span>
       <span className="hns-hud__sep" />
-      <span>
-        {found}/{hiders.length} found
-      </span>
+      <span>{t('lobby.foundCount', { found, total: hiders.length })}</span>
       {game.roundEndsAt ? (
         <>
           <span className="hns-hud__sep" />
@@ -61,7 +66,7 @@ const Hud = ({ me, game, now }) => {
         type="button"
         className="hns-hud__mute"
         onClick={toggleMuted}
-        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-label={t(muted ? 'overlay.unmute' : 'overlay.mute')}
       >
         {muted ? '🔇' : '🔊'}
       </button>
@@ -74,7 +79,7 @@ const Lockdown = ({ lockedUntil, lockdownMs, now }) => {
 
   return (
     <div className="hns-lock">
-      <span>🔒 Locked in</span>
+      <span>{`🔒 ${t('overlay.lockedIn')}`}</span>
       <span className="hns-lock__bar">
         <span style={{ width: `${(remaining / lockdownMs) * 100}%` }} />
       </span>
@@ -85,8 +90,8 @@ const Lockdown = ({ lockedUntil, lockdownMs, now }) => {
 
 const Countdown = ({ game, now }) => (
   <div className="hns-fullscreen">
-    <div className="hns-huge">{secondsLeft(game.phaseEndsAt, now) || 'GO'}</div>
-    <div className="hns-sub">Drawing the seeker…</div>
+    <div className="hns-huge">{secondsLeft(game.phaseEndsAt, now) || t('overlay.go')}</div>
+    <div className="hns-sub">{t('status.countdown')}</div>
   </div>
 );
 
@@ -94,18 +99,16 @@ const Reveal = ({ me }) => {
   if (me.role === ROLE.SEEKER) {
     return (
       <div className="hns-fullscreen">
-        <div className="hns-title">🔦 You are the seeker</div>
-        <div className="hns-sub">Eyes closed. Everyone else is scattering across the admin.</div>
+        <div className="hns-title">{`🔦 ${t('overlay.youAreSeeker')}`}</div>
+        <div className="hns-sub">{t('overlay.seekerIntro')}</div>
       </div>
     );
   }
 
   return (
     <div className="hns-fullscreen hns-fullscreen--soft">
-      <div className="hns-title">👻 Run and hide</div>
-      <div className="hns-sub">
-        Navigate anywhere in the admin panel. The page you land on is your hiding spot.
-      </div>
+      <div className="hns-title">{`👻 ${t('overlay.runAndHide')}`}</div>
+      <div className="hns-sub">{t('overlay.hiderIntro')}</div>
     </div>
   );
 };
@@ -113,16 +116,16 @@ const Reveal = ({ me }) => {
 const Blindfold = ({ game, now }) => (
   <div className="hns-fullscreen">
     <div className="hns-huge">🙈</div>
-    <div className="hns-title">No peeking</div>
+    <div className="hns-title">{t('overlay.noPeeking')}</div>
     <div className="hns-sub">
-      The hunt opens in {secondsLeft(game.phaseEndsAt, now)}s. Then find every cursor.
+      {t('overlay.huntOpens', { seconds: secondsLeft(game.phaseEndsAt, now) })}
     </div>
   </div>
 );
 
 const HidingBanner = ({ game, now }) => (
   <div className="hns-hud">
-    <span>👻 Hide!</span>
+    <span>{`👻 ${t('overlay.hideNow')}`}</span>
     <span className="hns-hud__sep" />
     <span>{secondsLeft(game.phaseEndsAt, now)}s</span>
   </div>
@@ -138,11 +141,14 @@ const Results = ({ game, me }) => {
     <div className="hns-fullscreen hns-fullscreen--soft">
       <div className="hns-card">
         <div className="hns-title" style={{ marginBottom: 4 }}>
-          {result.winner === 'seekers' ? '🔦 Seekers win' : '👻 Hiders win'}
+          {result.winner === 'seekers'
+            ? `🔦 ${t('overlay.seekersWin')}`
+            : `👻 ${t('overlay.hidersWin')}`}
         </div>
         <div className="hns-sub" style={{ marginBottom: 16 }}>
-          {won ? 'You made it.' : 'Better luck next round.'} Round lasted{' '}
-          {formatClock(Math.round(result.durationMs / 1000))}.
+          {`${t(won ? 'overlay.youMadeIt' : 'overlay.betterLuck')} ${t('overlay.roundLasted', {
+            time: formatClock(Math.round(result.durationMs / 1000)),
+          })}`}
         </div>
 
         {result.scores
@@ -154,12 +160,12 @@ const Results = ({ game, me }) => {
                 <span className="hns-dot" style={{ background: score.color }} />
                 {score.name}
               </span>
-              <span>{score.foundCount} found</span>
+              <span>{t('overlay.foundTotal', { count: score.foundCount })}</span>
             </div>
           ))}
 
         <button type="button" className="hns-btn" onClick={() => send('reset')}>
-          Back to the lobby
+          {t('lobby.backToLobby')}
         </button>
       </div>
     </div>

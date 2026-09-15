@@ -17,7 +17,17 @@ const setup = ({ strapi }) => {
 
   const cfg = strapi.config.get(`plugin::${PLUGIN_ID}`);
   const game = strapi.plugin(PLUGIN_ID).service('game');
+  const leaderboard = strapi.plugin(PLUGIN_ID).service('leaderboard');
   const tickets = strapi.plugin(PLUGIN_ID).service('tickets');
+
+  const sendLeaderboard = (target) => {
+    leaderboard
+      .rows()
+      .then((rows) => target.emit('leaderboard', rows))
+      .catch((error) => {
+        strapi.log.error(`[hide-and-seek] could not read the leaderboard: ${error.message}`);
+      });
+  };
 
   io = new Server(httpServer, {
     path: SOCKET_PATH,
@@ -42,6 +52,7 @@ const setup = ({ strapi }) => {
 
     socket.data.playerId = player.id;
     socket.emit('hello', { playerId: player.id, state: game.publicState() });
+    sendLeaderboard(socket);
 
     socket.on('page', (payload = {}) => {
       game.setPage(player.id, payload.path);
@@ -86,7 +97,20 @@ const setup = ({ strapi }) => {
       io.emit('state', game.publicState());
     }
 
-    game.drainEvents().forEach((event) => io.emit('event', event));
+    game.drainEvents().forEach((event) => {
+      io.emit('event', event);
+
+      if (event.type !== 'over') {
+        return;
+      }
+
+      leaderboard
+        .record(event.participants)
+        .then((rows) => io.emit('leaderboard', rows))
+        .catch((error) => {
+          strapi.log.error(`[hide-and-seek] could not save the leaderboard: ${error.message}`);
+        });
+    });
 
     if (game.state.status !== STATUS.HUNTING) {
       return;

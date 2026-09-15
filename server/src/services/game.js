@@ -68,6 +68,8 @@ module.exports = ({ strapi }) => {
     lastMoveAt: 0,
     disconnectedAt: null,
     foundCount: 0,
+    /** Role this player was dealt at the start of the round, for the leaderboard. */
+    startedAs: null,
     /** While in the future, this player is stuck on their current page. */
     lockedUntil: 0,
   });
@@ -169,13 +171,14 @@ module.exports = ({ strapi }) => {
 
   const start = () => {
     if (![STATUS.LOBBY, STATUS.OVER].includes(state.status)) {
-      return { ok: false, error: 'A round is already running' };
+      // Codes, not sentences: the admin panel owns the wording and the locale.
+      return { ok: false, code: 'roundRunning' };
     }
 
     const candidates = [...state.players.values()].filter((p) => p.connected && p.ready);
 
     if (candidates.length < 2) {
-      return { ok: false, error: 'Need at least 2 ready players' };
+      return { ok: false, code: 'notEnoughPlayers' };
     }
 
     const cfg = settings();
@@ -191,10 +194,12 @@ module.exports = ({ strapi }) => {
 
       if (!player.connected || !player.ready) {
         player.role = ROLE.SPECTATOR;
+        player.startedAs = null;
         return;
       }
 
       player.role = seekers.has(player.id) ? ROLE.SEEKER : ROLE.HIDER;
+      player.startedAs = player.role;
     });
 
     state.holds.clear();
@@ -294,7 +299,21 @@ module.exports = ({ strapi }) => {
     state.players.forEach((player) => {
       player.lockedUntil = 0;
     });
-    emit({ type: 'over', result: state.result });
+
+    // Only players who were actually dealt a role count towards the leaderboard.
+    const participants = [...state.players.values()]
+      .filter((player) => player.startedAs)
+      .map((player) => ({
+        id: player.id,
+        name: player.name,
+        color: player.color,
+        startedAs: player.startedAs,
+        found: player.foundCount,
+        caught: player.caught,
+        survived: player.startedAs === ROLE.HIDER && !player.caught,
+      }));
+
+    emit({ type: 'over', result: state.result, participants });
     touch();
   };
 

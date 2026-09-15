@@ -1,6 +1,7 @@
 import { getFetchClient } from '@strapi/strapi/admin';
 import { io } from 'socket.io-client';
 
+import { refreshLocale, t } from '../i18n';
 import { PLUGIN_ID, ROLE, STATUS } from '../pluginId';
 import { getState, pushToast, setState } from '../store';
 import { sounds } from './sound';
@@ -140,7 +141,7 @@ const blockNavigation = (event) => {
 
   event.preventDefault();
   event.stopPropagation();
-  pushToast('bad', 'Locked in — you cannot leave yet!');
+  pushToast('bad', t('toast.locked'));
 };
 
 /* ------------------------------------------------------------------ *
@@ -153,17 +154,20 @@ const handleEvent = (event) => {
   if (event.type === 'catch') {
     if (event.hiderId === playerId) {
       sounds.caught();
-      pushToast('bad', `${event.seekerName} found you!`);
+      pushToast('bad', t('toast.foundYou', { name: event.seekerName }));
     } else if (event.seekerId === playerId) {
       sounds.found();
-      pushToast('good', `You found ${event.hiderName}!`);
+      pushToast('good', t('toast.youFound', { name: event.hiderName }));
     } else {
-      pushToast('neutral', `${event.seekerName} found ${event.hiderName}`);
+      pushToast(
+        'neutral',
+        t('toast.someoneFound', { seeker: event.seekerName, hider: event.hiderName })
+      );
     }
   }
 
   if (event.type === 'forfeit') {
-    pushToast('neutral', `${event.hiderName} left the game`);
+    pushToast('neutral', t('toast.left', { name: event.hiderName }));
   }
 
   if (event.type === 'phase' && event.status === STATUS.HIDING) {
@@ -278,6 +282,10 @@ const wire = (instance) => {
   instance.on('peers', handlePeers);
   instance.on('event', handleEvent);
 
+  instance.on('leaderboard', (rows) => {
+    setState({ leaderboard: Array.isArray(rows) ? rows : [] });
+  });
+
   instance.on('disconnect', () => {
     teardownSocket();
     scheduleRetry();
@@ -339,6 +347,7 @@ export function startClient() {
 
   started = true;
   patchHistory();
+  refreshLocale();
 
   window.addEventListener(NAVIGATION_EVENT, onNavigate);
   window.addEventListener('popstate', onNavigate);
@@ -348,7 +357,11 @@ export function startClient() {
   // Safety net for navigations that bypass the history API. Page reports only:
   // routing a reconnect through here would sidestep the backoff and poll the
   // ticket endpoint once a second whenever the server is down.
-  window.setInterval(reportPage, 1000);
+  window.setInterval(() => {
+    reportPage();
+    // Picks up a language change made in the profile page without a reload.
+    refreshLocale();
+  }, 1000);
 
   window.addEventListener('visibilitychange', () => {
     if (!document.hidden) {

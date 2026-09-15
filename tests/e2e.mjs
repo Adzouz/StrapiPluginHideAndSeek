@@ -27,12 +27,13 @@ const connect = async (email) => {
   const { ticket, socketPath } = await res.json();
 
   const socket = io(BASE, { path: socketPath, auth: { ticket }, transports: ['websocket'], reconnection: false });
-  const client = { socket, email, state: null, peers: [], you: null, events: [], id: null };
+  const client = { socket, email, state: null, peers: [], you: null, events: [], leaderboard: [], id: null };
 
   socket.on('hello', ({ playerId, state }) => { client.id = playerId; client.state = state; });
   socket.on('state', (state) => { client.state = state; });
   socket.on('peers', ({ peers, you }) => { client.peers = peers; client.you = you; });
   socket.on('event', (event) => client.events.push(event));
+  socket.on('leaderboard', (rows) => { client.leaderboard = rows; });
 
   await new Promise((resolve, reject) => {
     socket.once('hello', resolve);
@@ -147,6 +148,17 @@ const run = async () => {
   if (!caughtPlayer.caught) throw new Error('hider not marked caught');
   if (caughtPlayer.role !== 'spectator') throw new Error(`caughtBecome=spectator not honoured, got ${caughtPlayer.role}`);
   if (seeker.state.result.winner !== 'seekers') throw new Error('wrong winner');
+
+  // --- leaderboard --------------------------------------------------------
+  await waitFor(() => seeker.leaderboard.some((r) => r.id === seeker.id && r.found > 0), 'leaderboard updated', 5000);
+  const seekerRow = seeker.leaderboard.find((r) => r.id === seeker.id);
+  const hiderRow = seeker.leaderboard.find((r) => r.id === hider.id);
+  console.log('leaderboard:', JSON.stringify(seeker.leaderboard.map((r) => [r.name, r.points, r.found, r.survived, r.caught, r.rounds])));
+  if (seekerRow.points !== seekerRow.found * 10 + seekerRow.survived * 20) throw new Error('points formula mismatch');
+  if (hiderRow.caught < 1) throw new Error('caught not recorded for the hider');
+  if (seekerRow.rounds < 1 || hiderRow.rounds < 1) throw new Error('rounds not counted');
+  if (seeker.leaderboard[0].points < seeker.leaderboard[seeker.leaderboard.length - 1].points) throw new Error('leaderboard not sorted');
+  console.log('leaderboard recorded and sorted \u2713');
 
   seeker.socket.emit('reset');
   await waitFor(() => seeker.state.status === 'lobby', 'back to lobby');

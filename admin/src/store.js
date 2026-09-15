@@ -21,6 +21,10 @@ let state = {
   danger: false,
   /** Timestamp (server clock) until which this player cannot change page. */
   lockedUntil: 0,
+  /** All-time standings, refreshed on connect and after every round. */
+  leaderboard: [],
+  /** Admin locale the overlay catalogue is currently loaded for. */
+  locale: 'en',
   /** Transient banner: `{ id, kind, text }`. */
   toast: null,
   muted: readMuted(),

@@ -1,5 +1,6 @@
-import { PuzzlePiece } from '@strapi/icons';
+import { Crown, PuzzlePiece } from '@strapi/icons';
 
+import { msg } from './i18n';
 import { PLUGIN_ID } from './pluginId';
 import { startClient } from './net/client';
 import { mountOverlay } from './overlay/mount';
@@ -10,14 +11,23 @@ export default {
       id: 'lobby',
       pluginId: PLUGIN_ID,
       icon: PuzzlePiece,
-      title: {
-        id: `${PLUGIN_ID}.widget.title`,
-        defaultMessage: 'Hide & Seek',
-      },
+      title: msg('widget.title'),
       component: async () => {
         const { LobbyWidget } = await import('./components/LobbyWidget');
 
         return LobbyWidget;
+      },
+    });
+
+    app.widgets.register({
+      id: 'leaderboard',
+      pluginId: PLUGIN_ID,
+      icon: Crown,
+      title: msg('leaderboard.title'),
+      component: async () => {
+        const { LeaderboardWidget } = await import('./components/LeaderboardWidget');
+
+        return LeaderboardWidget;
       },
     });
   },

@@ -9,6 +9,13 @@ already spend your day in.
 > Built for the end of a sprint, a new joiner's first afternoon, or any excuse to
 > make five people click around the same Strapi at the same time.
 
+<p align="center">
+  <img src="docs/hider-spotted.png" alt="A hider's ghost cursor spotted in the Media Library" width="560">
+</p>
+
+<p align="center"><em>Michael Scott, hiding in an empty Media Library. The grace
+window has passed, so the seeker can finally see his cursor.</em></p>
+
 ## Requirements
 
 - **Strapi 5.13 or later** — the lobby is a homepage widget, and that API
@@ -30,6 +37,16 @@ start Strapi:
 npm run build && npm run develop
 ```
 
+Both widgets then appear on the admin homepage on their own.
+
+**Unless you have already rearranged your homepage.** Strapi saves a widget
+layout per admin user, and a saved layout lists the widgets it shows by name — so
+widgets registered later are not in it and stay hidden. If your homepage looks
+unchanged after installing, use **Add Widget** on the homepage to place
+*Hide & Seek* and *Hide & Seek leaderboard*. Each player does this once, for
+their own homepage. The plugin deliberately does not rewrite anybody's saved
+layout.
+
 Players are ordinary Strapi admin users. Create one per person under
 **Settings → Administration panel → Users**, or from the CLI:
 
@@ -42,6 +59,7 @@ Everyone logs into the same Strapi. The lobby is waiting on the homepage.
 ## How a round works
 
 **1. Lobby.** A widget on the admin homepage lists everyone currently connected.
+A second widget keeps the all-time leaderboard.
 Players mark themselves ready and agree on the house rules. Two ready players are
 enough to start.
 
@@ -64,6 +82,33 @@ them by keeping their own cursor on top of it for a beat.
 **5. Over.** The round ends when every hider has been found, or when the clock
 runs out and the survivors win. Everyone is sent back to the homepage for the
 next round.
+
+<p align="center">
+  <img src="docs/round-over.png" alt="End of round panel showing the winner and who found whom" width="340">
+</p>
+
+## Leaderboard
+
+![The lobby and leaderboard widgets on the Strapi homepage](docs/homepage-widgets.png)
+
+The plugin adds two homepage widgets: the lobby and an all-time leaderboard.
+Standings survive restarts — they are kept in Strapi's core store, not in memory,
+and deliberately **not** as a content type: a game has no business adding a
+collection to somebody's Content Manager.
+
+Scoring is simple enough to argue about:
+
+| | |
+| --- | --- |
+| Player found, as a seeker | **10 points** |
+| Round survived, as a hider | **20 points** |
+
+Each row also tracks rounds played, rounds seeking, players found, escapes and
+times caught. Your own row is pinned to the bottom of the board if you are not in
+the top ten.
+
+Standings are stored under the core-store key `plugin_hide-and-seek_leaderboard`;
+delete that row to wipe the board.
 
 ## Rules that keep it honest
 
@@ -133,8 +178,10 @@ is 2.5 seconds of pure dodging. Widen it for tension, narrow it for chaos.
 - **Authority.** The server decides everything: who seeks, who is visible to whom,
   who is locked in, and whether a catch happened — computed from both cursors
   server-side. The client only draws what it is told.
-- **State.** Entirely in memory. A round is short and a restart just sends everyone
-  back to the lobby, so nothing is worth a database round-trip at 20Hz.
+- **State.** Round state is entirely in memory: a round is short and a restart just
+  sends everyone back to the lobby, so nothing there is worth a database
+  round-trip at 20Hz. Only the leaderboard is persisted, once per round, when it
+  ends.
 - **Admin UI.** The lobby is a homepage widget. The game overlay has no such slot —
   nothing in the admin renders on every route — so it mounts its own React root on
   `document.body` from the plugin's `bootstrap()`, which survives client-side
@@ -189,8 +236,8 @@ the plugin.
 admin users in, takes tickets, connects both sockets and asserts that roles stay
 secret during the countdown, that the grace window really blinds the seeker, that
 the hider is always warned, that the lockdown blocks a page change and lifts on
-time, that a sustained cursor lock produces a catch, and that `caughtBecome` is
-honoured.
+time, that a sustained cursor lock produces a catch, that `caughtBecome` is
+honoured, and that the round lands on the leaderboard with the right points.
 
 ```bash
 npx strapi admin:create-user -e seeker@hns.test -p 'HideSeek1!' -f Sam -l Seeker
@@ -201,10 +248,40 @@ HNS_URL=http://127.0.0.1:1337 npm run test:e2e
 Override `HNS_URL`, `HNS_USER_A`, `HNS_USER_B` and `HNS_PASSWORD` to point it
 elsewhere.
 
+## Translations
+
+The admin panel and the in-game overlay are fully translated into **15 languages**
+besides English: French, German, Spanish, Italian, Portuguese (Portugal and
+Brazil), Dutch, Polish, Russian, Ukrainian, Turkish, Japanese, Korean and Chinese
+(Simplified and Traditional). The plugin follows whatever language the admin user
+picked in their profile; any locale without a catalogue falls back to English, so
+nothing ever renders blank.
+
+Adding a language is one file:
+
+```bash
+cp admin/src/translations/en.json admin/src/translations/<locale>.json
+```
+
+Keep the keys exactly as they are — they are the full message ids, prefixed with
+`hide-and-seek.`, because Strapi merges plugin catalogues without namespacing
+them — and translate the values. `{name}`, `{count}` and friends are
+placeholders and must survive the translation. Locale codes are the ones Strapi
+itself ships (`fr`, `pt-BR`, `zh-Hans`, …).
+
+The overlay renders outside Strapi's `IntlProvider`, so it cannot use react-intl;
+it reads the same catalogues through a small helper in `admin/src/i18n.js`. Both
+paths share one set of keys, and `admin/src/i18n.js` holds the English source of
+truth.
+
+Translations beyond English were written without native review — corrections are
+very welcome.
+
 ## Contributing
 
-Issues and pull requests welcome. Good first additions: new catch mechanics,
-per-round scoreboards, and a way to make long hiding spots leak a hint.
+Issues and pull requests welcome. Good first additions: a language (see above),
+new catch mechanics, per-round scoreboards, and a way to make long hiding spots
+leak a hint.
 
 ## License
 

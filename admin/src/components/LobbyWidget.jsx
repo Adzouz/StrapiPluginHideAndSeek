@@ -1,5 +1,7 @@
 import * as React from 'react';
 
+import { useIntl } from 'react-intl';
+
 import {
   Badge,
   Box,
@@ -12,6 +14,7 @@ import {
   Typography,
 } from '@strapi/design-system';
 
+import { msg } from '../i18n';
 import { send } from '../net/client';
 import { ROLE, STATUS } from '../pluginId';
 import { useGameStore } from '../store';
@@ -19,11 +22,11 @@ import { useGameStore } from '../store';
 const HIDE_DURATIONS = [10, 15, 20, 30, 45];
 const ROUND_DURATIONS = [180, 300, 600, 900];
 
-const STATUS_LABEL = {
-  [STATUS.COUNTDOWN]: 'Drawing the seeker…',
-  [STATUS.HIDING]: 'Everyone is hiding',
-  [STATUS.HUNTING]: 'Hunt in progress',
-  [STATUS.OVER]: 'Round over',
+const STATUS_KEY = {
+  [STATUS.COUNTDOWN]: 'status.countdown',
+  [STATUS.HIDING]: 'status.hiding',
+  [STATUS.HUNTING]: 'status.hunting',
+  [STATUS.OVER]: 'status.over',
 };
 
 const Dot = ({ color, dim }) => (
@@ -39,169 +42,253 @@ const Dot = ({ color, dim }) => (
   />
 );
 
-const PlayerRow = ({ player, isMe, inRound }) => (
-  <Flex justifyContent="space-between" alignItems="center" paddingTop={1} paddingBottom={1}>
-    <Flex gap={2} alignItems="center">
-      <Dot color={player.color} dim={!player.connected} />
-      <Typography variant="omega" textColor={player.connected ? 'neutral800' : 'neutral500'}>
-        {player.name}
-        {isMe ? ' (you)' : ''}
-      </Typography>
-    </Flex>
+const Setting = ({ label, first, value, onChange, children }) => (
+  // Label and select sit directly in the settings row rather than in a wrapper:
+  // labels take their natural width and the three selects split what is left, so
+  // "Caught mode" no longer eats into its own field.
+  <>
+    <Typography variant="pi" textColor="neutral600" shrink={0} paddingLeft={first ? 0 : 2}>
+      {label}
+    </Typography>
+    <Box flex="1" minWidth="0">
+      <SingleSelect size="S" aria-label={label} value={value} onChange={onChange}>
+        {children}
+      </SingleSelect>
+    </Box>
+  </>
+);
 
-    {inRound ? (
-      <Badge backgroundColor={player.caught ? 'danger100' : 'neutral150'}>
-        {player.caught ? 'found' : (player.role ?? '…')}
+/** One row rather than three stacked ones — the player list needs the space. */
+const Settings = ({ settings }) => {
+  const { formatMessage } = useIntl();
+
+  return (
+  <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
+    <Setting
+      label={formatMessage(msg('lobby.caughtMode'))}
+      first
+      value={settings.caughtBecome}
+      onChange={(value) => send('settings', { caughtBecome: value })}
+    >
+      <SingleSelectOption value={ROLE.SEEKER}>
+        {formatMessage(msg('lobby.seekers'))}
+      </SingleSelectOption>
+      <SingleSelectOption value={ROLE.SPECTATOR}>
+        {formatMessage(msg('lobby.spectators'))}
+      </SingleSelectOption>
+    </Setting>
+
+    <Setting
+      label={formatMessage(msg('lobby.hide'))}
+      value={settings.hideSeconds}
+      onChange={(value) => send('settings', { hideSeconds: Number(value) })}
+    >
+      {HIDE_DURATIONS.map((seconds) => (
+        <SingleSelectOption key={seconds} value={seconds}>
+          {formatMessage(msg('lobby.seconds'), { seconds })}
+        </SingleSelectOption>
+      ))}
+    </Setting>
+
+    <Setting
+      label={formatMessage(msg('lobby.limit'))}
+      value={settings.roundSeconds}
+      onChange={(value) => send('settings', { roundSeconds: Number(value) })}
+    >
+      {ROUND_DURATIONS.map((seconds) => (
+        <SingleSelectOption key={seconds} value={seconds}>
+          {formatMessage(msg('lobby.minutes'), { minutes: seconds / 60 })}
+        </SingleSelectOption>
+      ))}
+    </Setting>
+  </Flex>
+  );
+};
+
+const ROLE_KEY = {
+  [ROLE.SEEKER]: 'overlay.roleSeeker',
+  [ROLE.HIDER]: 'overlay.roleHider',
+  [ROLE.SPECTATOR]: 'overlay.roleSpectator',
+};
+
+const PlayerRow = ({ player, isMe, inRound }) => {
+  const { formatMessage } = useIntl();
+
+  const badge = () => {
+    if (!inRound) {
+      return formatMessage(msg(player.ready ? 'lobby.ready' : 'lobby.idle'));
+    }
+
+    if (player.caught) {
+      return formatMessage(msg('lobby.found'));
+    }
+
+    return player.role ? formatMessage(msg(ROLE_KEY[player.role])) : '…';
+  };
+
+  return (
+    <Flex
+      justifyContent="space-between"
+      alignItems="center"
+      gap={2}
+      paddingTop={1}
+      paddingBottom={1}
+    >
+      <Flex gap={2} alignItems="center" overflow="hidden">
+        <Dot color={player.color} dim={!player.connected} />
+        <Typography
+          variant="omega"
+          textColor={player.connected ? 'neutral800' : 'neutral500'}
+          ellipsis
+        >
+          {isMe ? formatMessage(msg('lobby.you'), { name: player.name }) : player.name}
+        </Typography>
+      </Flex>
+
+      <Badge
+        backgroundColor={
+          // eslint-disable-next-line no-nested-ternary
+          inRound
+            ? player.caught
+              ? 'danger100'
+              : 'neutral150'
+            : player.ready
+              ? 'success100'
+              : 'neutral150'
+        }
+      >
+        {badge()}
       </Badge>
-    ) : (
-      <Badge backgroundColor={player.ready ? 'success100' : 'neutral150'}>
-        {player.ready ? 'ready' : 'idle'}
-      </Badge>
-    )}
+    </Flex>
+  );
+};
+
+/**
+ * The widget body is a fixed 261px box that scrolls as a whole, so the actions
+ * would slide out of reach as soon as a few players joined. Fill that height
+ * exactly instead and let only the roster scroll.
+ */
+const Shell = ({ header, children, footer }) => (
+  <Flex direction="column" alignItems="stretch" height="100%">
+    <Box shrink={0}>{header}</Box>
+    <Box flex="1" overflow="auto" paddingTop={2} paddingBottom={2}>
+      {children}
+    </Box>
+    <Box shrink={0}>{footer}</Box>
   </Flex>
 );
 
 const Lobby = ({ game, me }) => {
+  const { formatMessage } = useIntl();
   const readyCount = game.players.filter((p) => p.ready && p.connected).length;
-  const [error, setError] = React.useState(null);
+  const [errorCode, setErrorCode] = React.useState(null);
 
   const start = () => {
-    setError(null);
+    setErrorCode(null);
     send('start', {}, (result) => {
       if (result && !result.ok) {
-        setError(result.error);
+        setErrorCode(result.code);
       }
     });
   };
 
   return (
-    <>
-      <Flex direction="column" alignItems="stretch" gap={2} paddingBottom={3}>
-        <Flex justifyContent="space-between" alignItems="center" gap={2}>
-          <Typography variant="pi" textColor="neutral600">
-            When caught, players become
-          </Typography>
-          <SingleSelect
-            size="S"
-            aria-label="When caught, players become"
-            value={game.settings.caughtBecome}
-            onChange={(value) => send('settings', { caughtBecome: value })}
-          >
-            <SingleSelectOption value={ROLE.SEEKER}>seekers</SingleSelectOption>
-            <SingleSelectOption value={ROLE.SPECTATOR}>spectators</SingleSelectOption>
-          </SingleSelect>
-        </Flex>
+    <Shell
+      header={
+        <>
+          <Settings settings={game.settings} />
+          <Divider />
+        </>
+      }
+      footer={
+        <>
+          <Divider />
+          <Box paddingTop={2}>
+            <Flex gap={2}>
+              <Button
+                variant={me.ready ? 'tertiary' : 'secondary'}
+                fullWidth
+                onClick={() => send('ready', { ready: !me.ready })}
+              >
+                {formatMessage(msg(me.ready ? 'lobby.imNotReady' : 'lobby.imReady'))}
+              </Button>
+              <Button fullWidth disabled={readyCount < 2} onClick={start}>
+                {readyCount < 2
+                  ? formatMessage(msg('lobby.needPlayers'))
+                  : formatMessage(msg('lobby.start'), { count: readyCount })}
+              </Button>
+            </Flex>
 
-        <Flex justifyContent="space-between" alignItems="center" gap={2}>
-          <Typography variant="pi" textColor="neutral600">
-            Time to hide
-          </Typography>
-          <SingleSelect
-            size="S"
-            aria-label="Time to hide"
-            value={game.settings.hideSeconds}
-            onChange={(value) => send('settings', { hideSeconds: Number(value) })}
-          >
-            {HIDE_DURATIONS.map((seconds) => (
-              <SingleSelectOption key={seconds} value={seconds}>
-                {`${seconds}s`}
-              </SingleSelectOption>
-            ))}
-          </SingleSelect>
-        </Flex>
-
-        <Flex justifyContent="space-between" alignItems="center" gap={2}>
-          <Typography variant="pi" textColor="neutral600">
-            Round limit
-          </Typography>
-          <SingleSelect
-            size="S"
-            aria-label="Round limit"
-            value={game.settings.roundSeconds}
-            onChange={(value) => send('settings', { roundSeconds: Number(value) })}
-          >
-            {ROUND_DURATIONS.map((seconds) => (
-              <SingleSelectOption key={seconds} value={seconds}>
-                {`${seconds / 60} min`}
-              </SingleSelectOption>
-            ))}
-          </SingleSelect>
-        </Flex>
-      </Flex>
-
-      <Divider />
-
-      <Box paddingTop={2} paddingBottom={2}>
-        {game.players.map((player) => (
-          <PlayerRow key={player.id} player={player} isMe={player.id === me.id} inRound={false} />
-        ))}
-      </Box>
-
-      <Flex gap={2}>
-        <Button
-          variant={me.ready ? 'tertiary' : 'secondary'}
-          fullWidth
-          onClick={() => send('ready', { ready: !me.ready })}
-        >
-          {me.ready ? "I'm not ready" : "I'm ready"}
-        </Button>
-        <Button fullWidth disabled={readyCount < 2} onClick={start}>
-          {readyCount < 2 ? 'Need 2 players' : `Start (${readyCount})`}
-        </Button>
-      </Flex>
-
-      {error ? (
-        <Box paddingTop={2}>
-          <Typography variant="pi" textColor="danger600">
-            {error}
-          </Typography>
-        </Box>
-      ) : null}
-    </>
+            {errorCode ? (
+              <Box paddingTop={1}>
+                <Typography variant="pi" textColor="danger600">
+                  {formatMessage(msg(`error.${errorCode}`))}
+                </Typography>
+              </Box>
+            ) : null}
+          </Box>
+        </>
+      }
+    >
+      {game.players.map((player) => (
+        <PlayerRow key={player.id} player={player} isMe={player.id === me.id} inRound={false} />
+      ))}
+    </Shell>
   );
 };
 
 const InRound = ({ game, me }) => {
+  const { formatMessage } = useIntl();
   const hiders = game.players.filter((p) => p.role === ROLE.HIDER || p.caught);
   const found = hiders.filter((p) => p.caught).length;
 
   return (
-    <>
-      <Flex justifyContent="space-between" alignItems="center" paddingBottom={2}>
-        <Typography variant="delta">{STATUS_LABEL[game.status]}</Typography>
-        <Badge>{`${found}/${hiders.length} found`}</Badge>
-      </Flex>
-
-      <Divider />
-
-      <Box paddingTop={2} paddingBottom={2}>
-        {game.players.map((player) => (
-          <PlayerRow key={player.id} player={player} isMe={player.id === me.id} inRound />
-        ))}
-      </Box>
-
-      {game.status === STATUS.OVER ? (
-        <Button fullWidth onClick={() => send('reset')}>
-          Back to the lobby
-        </Button>
-      ) : (
-        <Button variant="tertiary" fullWidth onClick={() => send('reset')}>
-          Abort round
-        </Button>
-      )}
-    </>
+    <Shell
+      header={
+        <>
+          <Flex justifyContent="space-between" alignItems="center" paddingBottom={2}>
+            <Typography variant="delta">{formatMessage(msg(STATUS_KEY[game.status]))}</Typography>
+            <Badge>
+              {formatMessage(msg('lobby.foundCount'), { found, total: hiders.length })}
+            </Badge>
+          </Flex>
+          <Divider />
+        </>
+      }
+      footer={
+        <>
+          <Divider />
+          <Box paddingTop={2}>
+            {game.status === STATUS.OVER ? (
+              <Button fullWidth onClick={() => send('reset')}>
+                {formatMessage(msg('lobby.backToLobby'))}
+              </Button>
+            ) : (
+              <Button variant="tertiary" fullWidth onClick={() => send('reset')}>
+                {formatMessage(msg('lobby.abort'))}
+              </Button>
+            )}
+          </Box>
+        </>
+      }
+    >
+      {game.players.map((player) => (
+        <PlayerRow key={player.id} player={player} isMe={player.id === me.id} inRound />
+      ))}
+    </Shell>
   );
 };
 
 export const LobbyWidget = () => {
+  const { formatMessage } = useIntl();
   const { game, playerId, connected } = useGameStore();
 
   if (!connected || !game || !playerId) {
     return (
       <Flex direction="column" gap={2} alignItems="center" justifyContent="center" height="100%">
-        <Loader small>Connecting</Loader>
+        <Loader small>{formatMessage(msg('lobby.connecting'))}</Loader>
         <Typography variant="pi" textColor="neutral600">
-          Waiting for the game server…
+          {formatMessage(msg('lobby.waiting'))}
         </Typography>
       </Flex>
     );
@@ -213,14 +300,10 @@ export const LobbyWidget = () => {
     return null;
   }
 
-  return (
-    <Box>
-      {game.status === STATUS.LOBBY ? (
-        <Lobby game={game} me={me} />
-      ) : (
-        <InRound game={game} me={me} />
-      )}
-    </Box>
+  return game.status === STATUS.LOBBY ? (
+    <Lobby game={game} me={me} />
+  ) : (
+    <InRound game={game} me={me} />
   );
 };
 
