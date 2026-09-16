@@ -202,7 +202,7 @@ is 2.5 seconds of pure dodging. Widen it for tension, narrow it for chaos.
 ## Local development
 
 ```bash
-git clone <this repo>
+git clone https://github.com/Adzouz/StrapiPluginHideAndSeek.git
 cd strapi-plugin-hide-and-seek
 npm install
 npm run build      # or: npm run watch
