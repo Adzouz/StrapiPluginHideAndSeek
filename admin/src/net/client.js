@@ -224,8 +224,8 @@ const handleEvent = (event) => {
     }
   }
 
-  if (event.type === 'forfeit') {
-    pushToast('neutral', t('toast.left', { name: event.hiderName }));
+  if (event.type === 'left') {
+    pushToast('neutral', t('toast.left', { name: event.name }));
   }
 
   if (event.type === 'phase' && event.status === STATUS.HIDING) {

@@ -10,11 +10,14 @@ already spend your day in.
 > make five people click around the same Strapi at the same time.
 
 <p align="center">
-  <img src="docs/hider-spotted.png" alt="A hider's ghost cursor spotted in the Media Library" width="560">
+  <img src="docs/chase.png" alt="A hider cornered by the seeker on the Settings page" width="820">
 </p>
 
-<p align="center"><em>Michael Scott, hiding in an empty Media Library. The grace
-window has passed, so the seeker can finally see his cursor.</em></p>
+<p align="center"><em>A hider cornered in Settings. The pill says what you are, the
+screen reddens because a seeker is in the room, and the dashed marker labelled
+<strong>You</strong> is the hider's own position — trailing their cursor, because a
+cornered hider is slowed. The seeker's red marker shows 💤: they have tabbed away,
+so the game parked them in the middle of the page.</em></p>
 
 ## Requirements
 
@@ -39,6 +42,8 @@ npm run build && npm run develop
 
 Both widgets then appear on the admin homepage on their own.
 
+![The lobby and leaderboard widgets on the Strapi homepage](docs/homepage.png)
+
 **Unless you have already rearranged your homepage.** Strapi saves a widget
 layout per admin user, and a saved layout lists the widgets it shows by name — so
 widgets registered later are not in it and stay hidden. If your homepage looks
@@ -60,6 +65,10 @@ Everyone logs into the same Strapi. The lobby is waiting on the homepage.
 
 **1. Lobby.** A widget on the admin homepage lists everyone currently connected.
 A second widget keeps the all-time leaderboard.
+
+<p align="center">
+  <img src="docs/lobby-widget.png" alt="The lobby widget: house rules, players and their ready state" width="620">
+</p>
 Players mark themselves ready and agree on the house rules. Two ready players are
 enough to start.
 
@@ -121,7 +130,9 @@ and it refreshes every `hintRepeatMs` until they find someone.
 
 ## Leaderboard
 
-![The lobby and leaderboard widgets on the Strapi homepage](docs/homepage-widgets.png)
+<p align="center">
+  <img src="docs/leaderboard-widget.png" alt="The leaderboard widget with medals, points and per-player tallies" width="620">
+</p>
 
 The plugin adds two homepage widgets: the lobby and an all-time leaderboard.
 Standings survive restarts — they are kept in Strapi's core store, not in memory,
@@ -158,9 +169,20 @@ delete that row to wipe the board.
   sees them; a reload or the back button can still move the browser, but the game
   ignores the move and keeps the player in the room, still catchable. Escaping
   that way gains nothing.
-- **No rage-quitting.** A hider who disconnects mid-hunt forfeits after a delay.
-  Logging out gives up your seat immediately; a plain disconnect keeps it for a
-  few seconds, so reloading the admin does not lose your place in the lobby.
+- **No rage-quitting.** Leaving takes you out of the round entirely — you are
+  removed from the roster rather than left standing there to be hunted. Closing
+  the tab or logging out counts as leaving; logging out gives up the seat at
+  once, while a dropped connection is held briefly first so that reloading the
+  admin does not cost you the game.
+- **No removing the players.** While a round is on, the admin API refuses to
+  delete an admin user who is in it — single or batch — or to deactivate them,
+  answering 409 and naming who is playing. The lobby is built out of admin users,
+  so removing one mid-game strands everyone waiting on a player who no longer
+  exists. Everything else still works: renaming a player, editing their roles,
+  and deleting or deactivating anyone not in the round.
+- **No hollow rounds.** If every seeker leaves, the round ends there and then and
+  the hiders win — nobody is left to find them. The same goes the other way: if
+  the last hider walks out, the seekers have found everyone there is to find.
 - **No wandering off.** While a round is running, every link leaving the admin —
   the Marketplace entry, documentation links, anything off-origin — is dimmed and
   dead. One stray click into a new tab used to take a player out of the game.
@@ -310,18 +332,26 @@ that installing this package somewhere without git does not fail.
 
 `tests/e2e.mjs` plays a full headless round against a running Strapi: it logs two
 admin users in, takes tickets, connects both sockets and asserts that roles stay
-secret during the countdown, that the grace window really blinds the seeker, that
-the hider is always warned, that the lockdown blocks a page change and lifts on
-time, that a sustained cursor lock produces a catch, that `caughtBecome` is
-honoured, and that the round lands on the leaderboard with the right points.
+secret during the countdown, that both sides see each other the moment they share
+a page, that the lockdown blocks a page change and lifts on time, that a
+sustained cursor lock produces a catch, that `caughtBecome` is honoured, that the
+round lands on the leaderboard with the right points, and that a finished round
+leaves the lobby usable with everyone back to idle.
 
 `tests/mechanics.mjs` covers the duel rules: immediate visibility on arrival, the
 speed limit on a cornered hider, the away-from-window parking, the safe zone, and
 the survival time carried by a catch.
 
 `tests/disconnect.mjs` covers who stays in the roster: a reload keeps your seat,
-a mid-round quit is held for the forfeit timer, and a player who never comes back
-is swept once the round ends.
+logging out gives it up at once, a player who never comes back is swept, and
+leaving mid-round drops you from it — including the case where the last seeker
+walks out and the round ends on the spot.
+
+`tests/deletion.mjs` checks the guard that stops an admin user being deleted or
+deactivated out of a running round — and that it gets out of the way in the lobby, for
+non-players, and once the round is over. Every account it deletes is one it
+created for the purpose, so it leaves your test users alone; still, point it at a
+scratch project rather than anything you care about.
 
 `tests/spectator.mjs` needs three players and covers what happens after a catch:
 the follow roster, the one-way visibility between spectators and players, and the
@@ -337,12 +367,13 @@ HNS_URL=http://127.0.0.1:1337 npm run test:e2e
 HNS_URL=http://127.0.0.1:1337 npm run test:mechanics
 HNS_URL=http://127.0.0.1:1337 npm run test:spectator
 HNS_URL=http://127.0.0.1:1337 npm run test:disconnect
+HNS_URL=http://127.0.0.1:1337 npm run test:deletion
 ```
 
-Leave a minute between suites. Each one logs its players in, and Strapi rate
-limits `/admin/login` — running them back to back earns a `429` and failures that
-look like game bugs but are not. Settings also carry over between runs, since the
-lobby keeps them until someone changes them.
+The suites can be run back to back: `tests/helpers.mjs` caches admin tokens in
+`tests/.tokens.json` (gitignored) and reuses them across runs, so Strapi's login
+rate limit is never reached. Delete that file to force fresh logins. Settings do
+carry over between runs, since the lobby keeps them until someone changes them.
 
 Override `HNS_URL`, `HNS_USER_A`, `HNS_USER_B` and `HNS_PASSWORD` to point it
 elsewhere.

@@ -2,3 +2,6 @@ node_modules
 dist
 .strapi
 *.log
+
+# Cached admin tokens for the test suites
+tests/.tokens.json

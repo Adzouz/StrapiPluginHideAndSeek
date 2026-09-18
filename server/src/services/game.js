@@ -11,6 +11,9 @@ const MUTABLE_SETTINGS = ['hideSeconds', 'roundSeconds', 'caughtBecome', 'seeker
  */
 const DISCONNECT_GRACE_MS = 5000;
 
+/** Phases where a round is under way and can therefore be abandoned. */
+const IN_ROUND = [STATUS.COUNTDOWN, STATUS.HIDING, STATUS.HUNTING];
+
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
 
 const CENTRE = { x: 0.5, y: 0.5 };
@@ -180,18 +183,12 @@ module.exports = ({ strapi }) => {
       return;
     }
 
-    if (betweenRounds()) {
-      state.players.delete(playerId);
-      touch();
-
-      return;
+    // Mid-round too: someone who has gone should not be hunted or waited for.
+    if (!betweenRounds() && player.startedAs) {
+      emit({ type: 'left', playerId: player.id, name: player.name, role: player.role });
     }
 
-    // Mid-round they still owe the forfeit timer.
-    player.connected = false;
-    player.disconnectedAt = Date.now();
-    player.page = null;
-    player.ready = false;
+    state.players.delete(playerId);
     touch();
   };
 
@@ -558,19 +555,36 @@ module.exports = ({ strapi }) => {
     });
   };
 
-  const evaluateForfeits = (at) => {
-    const cfg = config();
+  /**
+   * Ends a round nobody is left to play. Leavers are removed outright, so this
+   * reads the roster rather than connection flags — a reload is still in the
+   * game, a closed tab is not.
+   *
+   * @returns true when the round was ended
+   */
+  const endIfNobodyLeft = () => {
+    const dealt = [...state.players.values()].filter((player) => player.startedAs);
 
-    activeHiders()
-      .filter(
-        (p) => !p.connected && p.disconnectedAt && at - p.disconnectedAt >= cfg.forfeitAfterMs
-      )
-      .forEach((player) => {
-        player.caught = true;
-        player.role = ROLE.SPECTATOR;
-        emit({ type: 'forfeit', hiderId: player.id, hiderName: player.name });
-        touch();
-      });
+    if (dealt.length === 0) {
+      reset();
+
+      return true;
+    }
+
+    if (!dealt.some((player) => player.role === ROLE.SEEKER)) {
+      // Everyone doing the hunting has gone: the hiders were never found.
+      finish('hiders');
+
+      return true;
+    }
+
+    if (state.status === STATUS.HUNTING && activeHiders().length === 0) {
+      finish('seekers');
+
+      return true;
+    }
+
+    return false;
   };
 
   /**
@@ -619,17 +633,17 @@ module.exports = ({ strapi }) => {
    * somebody who is about to reconnect.
    */
   const sweepDisconnected = (at) => {
-    if (!betweenRounds()) {
-      return;
-    }
+    // Mid-round the window is longer: an accidental reload should not cost you
+    // the game, while a closed tab should not leave a ghost to hunt for long.
+    const grace = betweenRounds() ? DISCONNECT_GRACE_MS : config().forfeitAfterMs;
 
     state.players.forEach((player) => {
-      if (player.connected) {
+      if (player.connected || at - (player.disconnectedAt ?? at) < grace) {
         return;
       }
 
-      if (at - (player.disconnectedAt ?? at) < DISCONNECT_GRACE_MS) {
-        return;
+      if (!betweenRounds() && player.startedAs) {
+        emit({ type: 'left', playerId: player.id, name: player.name, role: player.role });
       }
 
       state.players.delete(player.id);
@@ -639,7 +653,6 @@ module.exports = ({ strapi }) => {
 
   const tick = () => {
     const at = Date.now();
-    const cfg = config();
     const dtMs = Math.min(200, Math.max(0, at - state.lastTickAt));
 
     state.lastTickAt = at;
@@ -669,11 +682,14 @@ module.exports = ({ strapi }) => {
     // dropped out mid-round need clearing out.
     sweepDisconnected(at);
 
+    if (IN_ROUND.includes(state.status) && endIfNobodyLeft()) {
+      return;
+    }
+
     if (state.status !== STATUS.HUNTING) {
       return;
     }
 
-    evaluateForfeits(at);
     updatePositions(dtMs);
     evaluateLockdowns(at);
     evaluateCatches(at);
@@ -685,15 +701,6 @@ module.exports = ({ strapi }) => {
     }
 
     if (state.roundEndsAt && at >= state.roundEndsAt) {
-      finish('hiders');
-    }
-
-    // Everyone hunting them left: nothing to do but end it.
-    const liveSeekers = [...state.players.values()].filter(
-      (p) => p.role === ROLE.SEEKER && p.connected
-    );
-
-    if (liveSeekers.length === 0 && at - (state.startedAt ?? at) > cfg.forfeitAfterMs) {
       finish('hiders');
     }
   };
@@ -848,6 +855,21 @@ module.exports = ({ strapi }) => {
     };
   };
 
+  /**
+   * Of these admin user ids, which are currently dealt into a running round.
+   * Used to refuse deleting somebody out from under the game.
+   */
+  const playersInRound = (ids = []) => {
+    if (!IN_ROUND.includes(state.status)) {
+      return [];
+    }
+
+    return ids
+      .map((id) => state.players.get(String(id)))
+      .filter((player) => player && player.startedAs)
+      .map((player) => ({ id: player.id, name: player.name }));
+  };
+
   const drainEvents = () => state.events.splice(0, state.events.length);
 
   return {
@@ -864,6 +886,7 @@ module.exports = ({ strapi }) => {
     forget,
     tick,
     publicState,
+    playersInRound,
     viewFor,
     peersFor,
     drainEvents,

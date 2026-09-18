@@ -1,61 +1,4 @@
-import { io } from 'socket.io-client';
-
-const BASE = process.env.HNS_URL ?? 'http://127.0.0.1:1337';
-const PASSWORD = process.env.HNS_PASSWORD ?? 'HideSeek1!';
-const USERS = (process.env.HNS_USERS ?? 'seeker@hns.test,hider@hns.test,third@hns.test').split(',');
-
-const connect = async (email) => {
-  const r = await fetch(`${BASE}/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  const { data } = await r.json();
-  const t = await fetch(`${BASE}/hide-and-seek/ticket`, {
-    headers: { Authorization: `Bearer ${data.token}` },
-  });
-  const d = await t.json();
-  const socket = io(BASE, {
-    path: d.socketPath,
-    auth: { ticket: d.ticket },
-    transports: ['websocket'],
-    reconnection: false,
-  });
-  const c = { socket, email, state: null, id: null };
-  socket.on('hello', ({ playerId, state }) => {
-    c.id = playerId;
-    c.state = state;
-  });
-  socket.on('state', (s) => {
-    c.state = s;
-  });
-  await new Promise((res, rej) => {
-    socket.once('hello', res);
-    socket.once('connect_error', rej);
-    setTimeout(() => rej(new Error('no hello')), 5000);
-  });
-  return c;
-};
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const wait = (fn, label, ms = 20000) =>
-  new Promise((res, rej) => {
-    const t0 = Date.now();
-    const id = setInterval(() => {
-      if (fn()) {
-        clearInterval(id);
-        res(Date.now() - t0);
-      } else if (Date.now() - t0 > ms) {
-        clearInterval(id);
-        rej(new Error('timeout: ' + label));
-      }
-    }, 20);
-  });
-const roster = (c) =>
-  c.state.players.map((p) => `${p.name}${p.connected ? '' : ' (disconnected)'}`);
-const check = (ok, msg) => {
-  if (!ok) throw new Error(msg);
-  console.log('  ✓ ' + msg);
-};
+import { USERS, check, connect, roster, sleep, wait } from './helpers.mjs';
 
 const run = async () => {
   const a = await connect(USERS[0]);
@@ -108,8 +51,38 @@ const run = async () => {
   const gone = await wait(() => a.state.players.length === 2, 'sweep', 12000);
   check(true, `swept ${(gone / 1000).toFixed(1)}s after the round ended: ${roster(a)}`);
 
-  a.socket.close();
-  c3.socket.close();
+  // --- leaving mid-round -------------------------------------------------
+  console.log('\nleaving mid-round drops you from the round');
+  b = await connect(USERS[1]);
+  await sleep(400);
+  a.socket.emit('settings', { hideSeconds: 1, caughtBecome: 'spectator', seekerCount: 1 });
+  [a, b, c3].forEach((x) => x.socket.emit('ready', { ready: true }));
+  await wait(() => a.state.players.filter((p) => p.ready).length === 3, 'ready again');
+  await new Promise((r) => a.socket.emit('start', {}, r));
+  await wait(() => a.state.status === 'hunting', 'hunting again', 15000);
+
+  const roleOf = (c) => c.state.players.find((p) => p.id === c.id)?.role;
+  const seeker = [a, b, c3].find((c) => roleOf(c) === 'seeker');
+  const hiders = [a, b, c3].filter((c) => roleOf(c) === 'hider');
+
+  // A hider walks out: the round carries on without them.
+  hiders[0].socket.emit('bye');
+  await wait(() => seeker.state.players.length === 2, 'hider removed', 4000);
+  check(seeker.state.status === 'hunting', 'round continues after one hider leaves');
+  check(
+    seeker.state.players.every((p) => p.id !== hiders[0].id),
+    'the leaver is gone from the roster, not just greyed out'
+  );
+
+  // The only seeker walks out: nobody is hunting, so the round is over.
+  seeker.socket.emit('bye');
+  await wait(() => seeker.state.status === 'over', 'round ends with no seeker', 4000);
+  check(
+    seeker.state.result.winner === 'hiders',
+    `hiders win by abandonment (${seeker.state.result.winner})`
+  );
+
+  [a, b, c3].forEach((x) => x.socket.close());
   console.log('\nDISCONNECT HANDLING PASSES');
   process.exit(0);
 };

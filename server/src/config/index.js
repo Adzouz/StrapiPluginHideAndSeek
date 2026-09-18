@@ -44,7 +44,12 @@ module.exports = {
     caughtBecome: ROLE.SEEKER,
     /** How many seekers are drawn at the start of a round. */
     seekerCount: 1,
-    /** A hider who stays disconnected this long forfeits. */
+    /**
+     * How long a disconnected player is held mid-round before being dropped
+     * from it. Long enough to survive an accidental reload, short enough that a
+     * closed tab is not hunted for the rest of the round. Between rounds the
+     * seat is given up after a few seconds instead.
+     */
     forfeitAfterMs: 20000,
     /** Server tick rate, also the rate positions are broadcast at. */
     tickHz: 20,

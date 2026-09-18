@@ -1,86 +1,8 @@
-import { io } from 'socket.io-client';
+import { USERS, connect, wait as waitFor } from './helpers.mjs';
 
-const BASE = process.env.HNS_URL ?? 'http://127.0.0.1:1337';
-const PASSWORD = process.env.HNS_PASSWORD ?? 'HideSeek1!';
-const PLAYER_A = process.env.HNS_USER_A ?? 'seeker@hns.test';
-const PLAYER_B = process.env.HNS_USER_B ?? 'hider@hns.test';
+const [PLAYER_A, PLAYER_B] = USERS;
 const PAGE = '/admin/plugins/hide-and-seek-test';
 const ESCAPE_PAGE = '/admin/settings/hide-and-seek-escape';
-
-const login = async (email) => {
-  const res = await fetch(`${BASE}/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(`login ${email}: ${res.status} ${JSON.stringify(body)}`);
-  return body.data.token;
-};
-
-const connect = async (email) => {
-  const token = await login(email);
-  const res = await fetch(`${BASE}/hide-and-seek/ticket`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`ticket ${email}: ${res.status}`);
-  const { ticket, socketPath } = await res.json();
-
-  const socket = io(BASE, {
-    path: socketPath,
-    auth: { ticket },
-    transports: ['websocket'],
-    reconnection: false,
-  });
-  const client = {
-    socket,
-    email,
-    state: null,
-    peers: [],
-    you: null,
-    events: [],
-    leaderboard: [],
-    id: null,
-  };
-
-  socket.on('hello', ({ playerId, state }) => {
-    client.id = playerId;
-    client.state = state;
-  });
-  socket.on('state', (state) => {
-    client.state = state;
-  });
-  socket.on('peers', ({ peers, you }) => {
-    client.peers = peers;
-    client.you = you;
-  });
-  socket.on('event', (event) => client.events.push(event));
-  socket.on('leaderboard', (rows) => {
-    client.leaderboard = rows;
-  });
-
-  await new Promise((resolve, reject) => {
-    socket.once('hello', resolve);
-    socket.once('connect_error', reject);
-    setTimeout(() => reject(new Error(`no hello for ${email}`)), 5000);
-  });
-
-  return client;
-};
-
-const waitFor = (predicate, label, timeout = 20000) =>
-  new Promise((resolve, reject) => {
-    const started = Date.now();
-    const id = setInterval(() => {
-      if (predicate()) {
-        clearInterval(id);
-        resolve();
-      } else if (Date.now() - started > timeout) {
-        clearInterval(id);
-        reject(new Error(`timeout: ${label}`));
-      }
-    }, 50);
-  });
 
 const run = async () => {
   const a = await connect(PLAYER_A);

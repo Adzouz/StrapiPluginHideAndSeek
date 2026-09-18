@@ -1,69 +1,9 @@
-import { io } from 'socket.io-client';
+import { USERS, check, connect, sleep, wait } from './helpers.mjs';
 
-const BASE = process.env.HNS_URL ?? 'http://127.0.0.1:1337';
-const PASSWORD = process.env.HNS_PASSWORD ?? 'HideSeek1!';
-const USERS = (process.env.HNS_USERS ?? 'seeker@hns.test,hider@hns.test,third@hns.test').split(',');
 /** The hint test waits out hintAfterMs; set HNS_SKIP_SLOW=1 to stop before it. */
 const SKIP_SLOW = process.env.HNS_SKIP_SLOW === '1';
 const A = '/admin/plugins/alpha';
 const B = '/admin/plugins/beta';
-
-const connect = async (email) => {
-  const r = await fetch(`${BASE}/admin/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: PASSWORD }),
-  });
-  const { data } = await r.json();
-  const t = await fetch(`${BASE}/hide-and-seek/ticket`, {
-    headers: { Authorization: `Bearer ${data.token}` },
-  });
-  const d = await t.json();
-  const socket = io(BASE, {
-    path: d.socketPath,
-    auth: { ticket: d.ticket },
-    transports: ['websocket'],
-    reconnection: false,
-  });
-  const c = { socket, email, state: null, peers: [], you: null, id: null, events: [] };
-  socket.on('hello', ({ playerId, state }) => {
-    c.id = playerId;
-    c.state = state;
-  });
-  socket.on('state', (s) => {
-    c.state = s;
-  });
-  socket.on('peers', (v) => {
-    c.peers = v.peers;
-    c.you = v.you;
-  });
-  socket.on('event', (e) => c.events.push(e));
-  await new Promise((res, rej) => {
-    socket.once('hello', res);
-    socket.once('connect_error', rej);
-    setTimeout(() => rej(new Error('no hello')), 5000);
-  });
-  return c;
-};
-
-const wait = (fn, label, ms = 20000) =>
-  new Promise((res, rej) => {
-    const t0 = Date.now();
-    const id = setInterval(() => {
-      if (fn()) {
-        clearInterval(id);
-        res(Date.now() - t0);
-      } else if (Date.now() - t0 > ms) {
-        clearInterval(id);
-        rej(new Error('timeout: ' + label));
-      }
-    }, 20);
-  });
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const check = (ok, msg) => {
-  if (!ok) throw new Error(msg);
-  console.log('  ✓ ' + msg);
-};
 
 const run = async () => {
   const cs = [await connect(USERS[0]), await connect(USERS[1]), await connect(USERS[2])];

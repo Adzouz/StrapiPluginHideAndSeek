@@ -49,6 +49,7 @@
     "lint:fix": "eslint . --fix",
     "prepare": "husky || true",
     "prepublishOnly": "npm run build",
+    "test:deletion": "node tests/deletion.mjs",
     "test:disconnect": "node tests/disconnect.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "test:mechanics": "node tests/mechanics.mjs",
