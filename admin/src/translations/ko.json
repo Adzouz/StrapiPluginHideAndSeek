@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "{name}님을 찾았습니다!",
   "hide-and-seek.toast.someoneFound": "{seeker}님이 {hider}님을 찾았습니다",
   "hide-and-seek.toast.left": "{name}님이 게임을 떠났습니다",
-  "hide-and-seek.toast.locked": "발이 묶임 — 아직 떠날 수 없습니다!"
+  "hide-and-seek.toast.locked": "발이 묶임 — 아직 떠날 수 없습니다!",
+  "hide-and-seek.overlay.youAreHider": "당신은 숨는 사람입니다",
+  "hide-and-seek.overlay.youAreSpectator": "당신은 관전자입니다",
+  "hide-and-seek.overlay.safeZone": "안전 지대",
+  "hide-and-seek.overlay.hintHere": "이 너머에 누군가 있습니다",
+  "hide-and-seek.overlay.hintPath": "{path} 에 누군가 있습니다",
+  "hide-and-seek.overlay.caughtTitle": "잡혔습니다!",
+  "hide-and-seek.overlay.caughtBy": "{name}님에게 들켰습니다.",
+  "hide-and-seek.overlay.lastedFor": "{time} 동안 버텼습니다.",
+  "hide-and-seek.overlay.nowSeeker": "이제 당신도 술래입니다 — 남은 사람을 찾으세요.",
+  "hide-and-seek.overlay.nowSpectator": "탈락했습니다. 남은 경기를 지켜보세요.",
+  "hide-and-seek.overlay.follow": "따라가는 중",
+  "hide-and-seek.overlay.followNobody": "따라갈 사람이 없습니다",
+  "hide-and-seek.overlay.followPrev": "이전 플레이어",
+  "hide-and-seek.overlay.followNext": "다음 플레이어",
+  "hide-and-seek.overlay.you": "나",
+  "hide-and-seek.toast.external": "게임 중에는 열 수 없습니다."
 }

@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "Hai trovato {name}!",
   "hide-and-seek.toast.someoneFound": "{seeker} ha trovato {hider}",
   "hide-and-seek.toast.left": "{name} ha lasciato la partita",
-  "hide-and-seek.toast.locked": "Bloccato — non puoi ancora andartene!"
+  "hide-and-seek.toast.locked": "Bloccato — non puoi ancora andartene!",
+  "hide-and-seek.overlay.youAreHider": "Sei un nascosto",
+  "hide-and-seek.overlay.youAreSpectator": "Sei spettatore",
+  "hide-and-seek.overlay.safeZone": "Zona sicura",
+  "hide-and-seek.overlay.hintHere": "Qualcuno è da queste parti",
+  "hide-and-seek.overlay.hintPath": "Qualcuno è su {path}",
+  "hide-and-seek.overlay.caughtTitle": "Preso!",
+  "hide-and-seek.overlay.caughtBy": "{name} ti ha trovato.",
+  "hide-and-seek.overlay.lastedFor": "Hai resistito {time}.",
+  "hide-and-seek.overlay.nowSeeker": "Ora sei un cercatore: trova gli altri.",
+  "hide-and-seek.overlay.nowSpectator": "Sei fuori. Goditi il finale.",
+  "hide-and-seek.overlay.follow": "Segui",
+  "hide-and-seek.overlay.followNobody": "Nessuno da seguire",
+  "hide-and-seek.overlay.followPrev": "Giocatore precedente",
+  "hide-and-seek.overlay.followNext": "Giocatore successivo",
+  "hide-and-seek.overlay.you": "Tu",
+  "hide-and-seek.toast.external": "Non durante la partita."
 }

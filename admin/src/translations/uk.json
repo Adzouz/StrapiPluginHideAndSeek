@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "Ви знайшли {name}!",
   "hide-and-seek.toast.someoneFound": "{seeker} знайшов {hider}",
   "hide-and-seek.toast.left": "{name} покинув гру",
-  "hide-and-seek.toast.locked": "Замкнено — піти поки не можна!"
+  "hide-and-seek.toast.locked": "Замкнено — піти поки не можна!",
+  "hide-and-seek.overlay.youAreHider": "Ви ховаєтеся",
+  "hide-and-seek.overlay.youAreSpectator": "Ви глядач",
+  "hide-and-seek.overlay.safeZone": "Безпечна зона",
+  "hide-and-seek.overlay.hintHere": "Хтось тут неподалік",
+  "hide-and-seek.overlay.hintPath": "Хтось на {path}",
+  "hide-and-seek.overlay.caughtTitle": "Спіймали!",
+  "hide-and-seek.overlay.caughtBy": "{name} знайшов вас.",
+  "hide-and-seek.overlay.lastedFor": "Ви протрималися {time}.",
+  "hide-and-seek.overlay.nowSeeker": "Тепер ви шукач — знайдіть решту.",
+  "hide-and-seek.overlay.nowSpectator": "Ви вибули. Дивіться, чим усе скінчиться.",
+  "hide-and-seek.overlay.follow": "Стежите за",
+  "hide-and-seek.overlay.followNobody": "Немає за ким стежити",
+  "hide-and-seek.overlay.followPrev": "Попередній гравець",
+  "hide-and-seek.overlay.followNext": "Наступний гравець",
+  "hide-and-seek.overlay.you": "Ви",
+  "hide-and-seek.toast.external": "Не під час гри."
 }

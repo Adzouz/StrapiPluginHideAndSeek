@@ -63,45 +63,45 @@ const Settings = ({ settings }) => {
   const { formatMessage } = useIntl();
 
   return (
-  <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
-    <Setting
-      label={formatMessage(msg('lobby.caughtMode'))}
-      first
-      value={settings.caughtBecome}
-      onChange={(value) => send('settings', { caughtBecome: value })}
-    >
-      <SingleSelectOption value={ROLE.SEEKER}>
-        {formatMessage(msg('lobby.seekers'))}
-      </SingleSelectOption>
-      <SingleSelectOption value={ROLE.SPECTATOR}>
-        {formatMessage(msg('lobby.spectators'))}
-      </SingleSelectOption>
-    </Setting>
-
-    <Setting
-      label={formatMessage(msg('lobby.hide'))}
-      value={settings.hideSeconds}
-      onChange={(value) => send('settings', { hideSeconds: Number(value) })}
-    >
-      {HIDE_DURATIONS.map((seconds) => (
-        <SingleSelectOption key={seconds} value={seconds}>
-          {formatMessage(msg('lobby.seconds'), { seconds })}
+    <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
+      <Setting
+        label={formatMessage(msg('lobby.caughtMode'))}
+        first
+        value={settings.caughtBecome}
+        onChange={(value) => send('settings', { caughtBecome: value })}
+      >
+        <SingleSelectOption value={ROLE.SEEKER}>
+          {formatMessage(msg('lobby.seekers'))}
         </SingleSelectOption>
-      ))}
-    </Setting>
-
-    <Setting
-      label={formatMessage(msg('lobby.limit'))}
-      value={settings.roundSeconds}
-      onChange={(value) => send('settings', { roundSeconds: Number(value) })}
-    >
-      {ROUND_DURATIONS.map((seconds) => (
-        <SingleSelectOption key={seconds} value={seconds}>
-          {formatMessage(msg('lobby.minutes'), { minutes: seconds / 60 })}
+        <SingleSelectOption value={ROLE.SPECTATOR}>
+          {formatMessage(msg('lobby.spectators'))}
         </SingleSelectOption>
-      ))}
-    </Setting>
-  </Flex>
+      </Setting>
+
+      <Setting
+        label={formatMessage(msg('lobby.hide'))}
+        value={settings.hideSeconds}
+        onChange={(value) => send('settings', { hideSeconds: Number(value) })}
+      >
+        {HIDE_DURATIONS.map((seconds) => (
+          <SingleSelectOption key={seconds} value={seconds}>
+            {formatMessage(msg('lobby.seconds'), { seconds })}
+          </SingleSelectOption>
+        ))}
+      </Setting>
+
+      <Setting
+        label={formatMessage(msg('lobby.limit'))}
+        value={settings.roundSeconds}
+        onChange={(value) => send('settings', { roundSeconds: Number(value) })}
+      >
+        {ROUND_DURATIONS.map((seconds) => (
+          <SingleSelectOption key={seconds} value={seconds}>
+            {formatMessage(msg('lobby.minutes'), { minutes: seconds / 60 })}
+          </SingleSelectOption>
+        ))}
+      </Setting>
+    </Flex>
   );
 };
 
@@ -147,7 +147,6 @@ const PlayerRow = ({ player, isMe, inRound }) => {
 
       <Badge
         backgroundColor={
-          // eslint-disable-next-line no-nested-ternary
           inRound
             ? player.caught
               ? 'danger100'
@@ -248,9 +247,7 @@ const InRound = ({ game, me }) => {
         <>
           <Flex justifyContent="space-between" alignItems="center" paddingBottom={2}>
             <Typography variant="delta">{formatMessage(msg(STATUS_KEY[game.status]))}</Typography>
-            <Badge>
-              {formatMessage(msg('lobby.foundCount'), { found, total: hiders.length })}
-            </Badge>
+            <Badge>{formatMessage(msg('lobby.foundCount'), { found, total: hiders.length })}</Badge>
           </Flex>
           <Divider />
         </>
@@ -259,15 +256,9 @@ const InRound = ({ game, me }) => {
         <>
           <Divider />
           <Box paddingTop={2}>
-            {game.status === STATUS.OVER ? (
-              <Button fullWidth onClick={() => send('reset')}>
-                {formatMessage(msg('lobby.backToLobby'))}
-              </Button>
-            ) : (
-              <Button variant="tertiary" fullWidth onClick={() => send('reset')}>
-                {formatMessage(msg('lobby.abort'))}
-              </Button>
-            )}
+            <Button variant="tertiary" fullWidth onClick={() => send('reset')}>
+              {formatMessage(msg('lobby.abort'))}
+            </Button>
           </Box>
         </>
       }
@@ -300,11 +291,11 @@ export const LobbyWidget = () => {
     return null;
   }
 
-  return game.status === STATUS.LOBBY ? (
-    <Lobby game={game} me={me} />
-  ) : (
-    <InRound game={game} me={me} />
-  );
+  // `over` is just the lobby with the last result still on screen: this widget
+  // is the lobby, so it never needs a way back to itself.
+  const between = [STATUS.LOBBY, STATUS.OVER].includes(game.status);
+
+  return between ? <Lobby game={game} me={me} /> : <InRound game={game} me={me} />;
 };
 
 export default LobbyWidget;

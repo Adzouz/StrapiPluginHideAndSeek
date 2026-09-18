@@ -25,41 +25,47 @@ const Row = ({ row, index, isMe }) => {
   const { formatMessage } = useIntl();
 
   return (
-  <Flex justifyContent="space-between" alignItems="center" gap={2} paddingTop={1} paddingBottom={1}>
-    <Flex gap={2} alignItems="center" overflow="hidden">
-      <Rank index={index} />
-      <span
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          background: row.color,
-          flexShrink: 0,
-        }}
-      />
-      <Typography variant="omega" fontWeight={isMe ? 'bold' : 'regular'} ellipsis>
-        {isMe ? formatMessage(msg('lobby.you'), { name: row.name }) : row.name}
-      </Typography>
-    </Flex>
-
-    <Flex gap={3} alignItems="center" flexShrink={0}>
-      <Tooltip
-        label={formatMessage(msg('leaderboard.rowHint'), {
-          found: row.found,
-          survived: row.survived,
-          caught: row.caught,
-          rounds: row.rounds,
-        })}
-      >
-        <Typography variant="pi" textColor="neutral600">
-          {`🔦 ${row.found} · 👻 ${row.survived}`}
+    <Flex
+      justifyContent="space-between"
+      alignItems="center"
+      gap={2}
+      paddingTop={1}
+      paddingBottom={1}
+    >
+      <Flex gap={2} alignItems="center" overflow="hidden">
+        <Rank index={index} />
+        <span
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            background: row.color,
+            flexShrink: 0,
+          }}
+        />
+        <Typography variant="omega" fontWeight={isMe ? 'bold' : 'regular'} ellipsis>
+          {isMe ? formatMessage(msg('lobby.you'), { name: row.name }) : row.name}
         </Typography>
-      </Tooltip>
-      <Typography variant="omega" fontWeight="bold">
-        {row.points}
-      </Typography>
+      </Flex>
+
+      <Flex gap={3} alignItems="center" flexShrink={0}>
+        <Tooltip
+          label={formatMessage(msg('leaderboard.rowHint'), {
+            found: row.found,
+            survived: row.survived,
+            caught: row.caught,
+            rounds: row.rounds,
+          })}
+        >
+          <Typography variant="pi" textColor="neutral600">
+            {`🔦 ${row.found} · 👻 ${row.survived}`}
+          </Typography>
+        </Tooltip>
+        <Typography variant="omega" fontWeight="bold">
+          {row.points}
+        </Typography>
+      </Flex>
     </Flex>
-  </Flex>
   );
 };
 

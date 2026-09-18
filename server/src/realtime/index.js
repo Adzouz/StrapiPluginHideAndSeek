@@ -62,6 +62,10 @@ const setup = ({ strapi }) => {
       game.setCursor(player.id, payload.x, payload.y);
     });
 
+    socket.on('away', (payload = {}) => {
+      game.setAway(player.id, payload.away);
+    });
+
     socket.on('ready', (payload = {}) => {
       game.setReady(player.id, payload.ready);
     });
@@ -82,6 +86,12 @@ const setup = ({ strapi }) => {
       game.reset();
     });
 
+    // Sent by a player on their way out (logging out), so the roster does not
+    // have to wait for the socket to lapse.
+    socket.on('bye', () => {
+      game.forget(player.id);
+    });
+
     socket.on('disconnect', () => {
       game.leave(socket.id);
     });
@@ -89,43 +99,46 @@ const setup = ({ strapi }) => {
 
   let lastVersion = -1;
 
-  loop = setInterval(() => {
-    game.tick();
+  loop = setInterval(
+    () => {
+      game.tick();
 
-    if (game.state.version !== lastVersion) {
-      lastVersion = game.state.version;
-      io.emit('state', game.publicState());
-    }
+      if (game.state.version !== lastVersion) {
+        lastVersion = game.state.version;
+        io.emit('state', game.publicState());
+      }
 
-    game.drainEvents().forEach((event) => {
-      io.emit('event', event);
+      game.drainEvents().forEach((event) => {
+        io.emit('event', event);
 
-      if (event.type !== 'over') {
+        if (event.type !== 'over') {
+          return;
+        }
+
+        leaderboard
+          .record(event.participants)
+          .then((rows) => io.emit('leaderboard', rows))
+          .catch((error) => {
+            strapi.log.error(`[hide-and-seek] could not save the leaderboard: ${error.message}`);
+          });
+      });
+
+      if (game.state.status !== STATUS.HUNTING) {
         return;
       }
 
-      leaderboard
-        .record(event.participants)
-        .then((rows) => io.emit('leaderboard', rows))
-        .catch((error) => {
-          strapi.log.error(`[hide-and-seek] could not save the leaderboard: ${error.message}`);
-        });
-    });
+      io.sockets.sockets.forEach((socket) => {
+        if (!socket.data.playerId) {
+          return;
+        }
 
-    if (game.state.status !== STATUS.HUNTING) {
-      return;
-    }
-
-    io.sockets.sockets.forEach((socket) => {
-      if (!socket.data.playerId) {
-        return;
-      }
-
-      // Volatile: a dropped position frame is always better than a late one.
-      // Carries the player's own lockdown deadline alongside what they can see.
-      socket.volatile.emit('peers', game.viewFor(socket.data.playerId));
-    });
-  }, Math.round(1000 / cfg.tickHz));
+        // Volatile: a dropped position frame is always better than a late one.
+        // Carries the player's own lockdown deadline alongside what they can see.
+        socket.volatile.emit('peers', game.viewFor(socket.data.playerId));
+      });
+    },
+    Math.round(1000 / cfg.tickHz)
+  );
 
   strapi.log.info(`[hide-and-seek] real-time server listening on ${SOCKET_PATH}`);
 };

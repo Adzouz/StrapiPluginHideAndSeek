@@ -25,6 +25,16 @@ let state = {
   leaderboard: [],
   /** Admin locale the overlay catalogue is currently loaded for. */
   locale: 'en',
+  /** Your own slice of the round: role, safe zone, lockdown, hint, follow list. */
+  you: null,
+  /** Who a spectator is tailing. */
+  followId: null,
+  /** Set the moment you are caught, so the overlay can say so full screen. */
+  caughtNotice: null,
+  /** Whether the current hint found a link to pulse on this page. */
+  hintMatched: false,
+  /** You closed the results card. Yours only — it does not end anyone's round. */
+  resultsDismissed: false,
   /** Transient banner: `{ id, kind, text }`. */
   toast: null,
   muted: readMuted(),

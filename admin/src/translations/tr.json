@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "{name} oyuncusunu buldun!",
   "hide-and-seek.toast.someoneFound": "{seeker}, {hider} oyuncusunu buldu",
   "hide-and-seek.toast.left": "{name} oyundan ayrıldı",
-  "hide-and-seek.toast.locked": "Kilitlendin — henüz gidemezsin!"
+  "hide-and-seek.toast.locked": "Kilitlendin — henüz gidemezsin!",
+  "hide-and-seek.overlay.youAreHider": "Saklanansın",
+  "hide-and-seek.overlay.youAreSpectator": "İzleyicisin",
+  "hide-and-seek.overlay.safeZone": "Güvenli bölge",
+  "hide-and-seek.overlay.hintHere": "Biri buralarda",
+  "hide-and-seek.overlay.hintPath": "Biri şurada: {path}",
+  "hide-and-seek.overlay.caughtTitle": "Yakalandın!",
+  "hide-and-seek.overlay.caughtBy": "{name} seni buldu.",
+  "hide-and-seek.overlay.lastedFor": "{time} dayandın.",
+  "hide-and-seek.overlay.nowSeeker": "Artık ebesin — kalanları bul.",
+  "hide-and-seek.overlay.nowSpectator": "Elendin. Kalanını izle.",
+  "hide-and-seek.overlay.follow": "Takip:",
+  "hide-and-seek.overlay.followNobody": "Takip edilecek kimse yok",
+  "hide-and-seek.overlay.followPrev": "Önceki oyuncu",
+  "hide-and-seek.overlay.followNext": "Sonraki oyuncu",
+  "hide-and-seek.overlay.you": "Sen",
+  "hide-and-seek.toast.external": "Oyun sürerken olmaz."
 }

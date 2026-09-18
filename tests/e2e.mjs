@@ -26,14 +26,38 @@ const connect = async (email) => {
   if (!res.ok) throw new Error(`ticket ${email}: ${res.status}`);
   const { ticket, socketPath } = await res.json();
 
-  const socket = io(BASE, { path: socketPath, auth: { ticket }, transports: ['websocket'], reconnection: false });
-  const client = { socket, email, state: null, peers: [], you: null, events: [], leaderboard: [], id: null };
+  const socket = io(BASE, {
+    path: socketPath,
+    auth: { ticket },
+    transports: ['websocket'],
+    reconnection: false,
+  });
+  const client = {
+    socket,
+    email,
+    state: null,
+    peers: [],
+    you: null,
+    events: [],
+    leaderboard: [],
+    id: null,
+  };
 
-  socket.on('hello', ({ playerId, state }) => { client.id = playerId; client.state = state; });
-  socket.on('state', (state) => { client.state = state; });
-  socket.on('peers', ({ peers, you }) => { client.peers = peers; client.you = you; });
+  socket.on('hello', ({ playerId, state }) => {
+    client.id = playerId;
+    client.state = state;
+  });
+  socket.on('state', (state) => {
+    client.state = state;
+  });
+  socket.on('peers', ({ peers, you }) => {
+    client.peers = peers;
+    client.you = you;
+  });
   socket.on('event', (event) => client.events.push(event));
-  socket.on('leaderboard', (rows) => { client.leaderboard = rows; });
+  socket.on('leaderboard', (rows) => {
+    client.leaderboard = rows;
+  });
 
   await new Promise((resolve, reject) => {
     socket.once('hello', resolve);
@@ -48,8 +72,13 @@ const waitFor = (predicate, label, timeout = 20000) =>
   new Promise((resolve, reject) => {
     const started = Date.now();
     const id = setInterval(() => {
-      if (predicate()) { clearInterval(id); resolve(); }
-      else if (Date.now() - started > timeout) { clearInterval(id); reject(new Error(`timeout: ${label}`)); }
+      if (predicate()) {
+        clearInterval(id);
+        resolve();
+      } else if (Date.now() - started > timeout) {
+        clearInterval(id);
+        reject(new Error(`timeout: ${label}`));
+      }
     }, 50);
   });
 
@@ -74,7 +103,8 @@ const run = async () => {
   if (!started.ok) throw new Error(`start refused: ${started.error}`);
 
   await waitFor(() => a.state.status === 'countdown', 'countdown');
-  if (a.state.players.some((p) => p.role !== null)) throw new Error('roles leaked during countdown');
+  if (a.state.players.some((p) => p.role !== null))
+    throw new Error('roles leaked during countdown');
   console.log('countdown, roles hidden ✓');
 
   await waitFor(() => a.state.status === 'hiding', 'hiding');
@@ -89,12 +119,13 @@ const run = async () => {
   await waitFor(() => seeker.state.status === 'hunting', 'hunting');
   console.log('hunt open');
 
-  // Grace window: the seeker must be blind to the hider for the first graceMs.
+  // Both sides see each other as soon as they share a page: the lockdown, not a
+  // grace window, is what gives the hider their chance now.
   [seeker, hider].forEach((c) => c.socket.emit('cursor', { x: 0.5, y: 0.5 }));
-  await new Promise((r) => setTimeout(r, 600));
-  if (seeker.peers.length !== 0) throw new Error('hider visible during grace window');
+  await new Promise((r) => setTimeout(r, 400));
+  if (seeker.peers.length !== 1) throw new Error('seeker should see the hider immediately');
   if (hider.peers.length !== 1) throw new Error('hider should see the seeker immediately');
-  console.log('grace window holds (seeker blind, hider warned) \u2713');
+  console.log('both sides visible on arrival \u2713');
 
   let jitter = 0;
   const mover = setInterval(() => {
@@ -105,16 +136,22 @@ const run = async () => {
 
   // Far apart first: the seeker must not be able to lock on.
   await new Promise((r) => setTimeout(r, 2500));
-  console.log('seeker sees peers:', JSON.stringify(seeker.peers.map((p) => [p.name, p.role, Number(p.catchProgress.toFixed(2))])));
+  console.log(
+    'seeker sees peers:',
+    JSON.stringify(seeker.peers.map((p) => [p.name, p.role, Number(p.catchProgress.toFixed(2))]))
+  );
   if (seeker.peers.length !== 1) throw new Error('seeker should see exactly the hider after grace');
   if (seeker.peers[0].catchProgress > 0) throw new Error('catch progress without proximity');
-  if (hider.peers.length !== 1 || hider.peers[0].role !== 'seeker') throw new Error('hider should always see the seeker');
+  if (hider.peers.length !== 1 || hider.peers[0].role !== 'seeker')
+    throw new Error('hider should always see the seeker');
 
   // --- lockdown -----------------------------------------------------------
   const lockdownMs = seeker.state.lockdownMs;
   if (!(seeker.you.lockedUntil > Date.now())) throw new Error('seeker not locked in');
   if (!(hider.you.lockedUntil > Date.now())) throw new Error('hider not locked in');
-  console.log(`both locked in for ${((hider.you.lockedUntil - Date.now()) / 1000).toFixed(1)}s more \u2713`);
+  console.log(
+    `both locked in for ${((hider.you.lockedUntil - Date.now()) / 1000).toFixed(1)}s more \u2713`
+  );
 
   hider.socket.emit('page', { path: ESCAPE_PAGE });
   await new Promise((r) => setTimeout(r, 400));
@@ -146,19 +183,56 @@ const run = async () => {
 
   const caughtPlayer = seeker.state.players.find((p) => p.id === hider.id);
   if (!caughtPlayer.caught) throw new Error('hider not marked caught');
-  if (caughtPlayer.role !== 'spectator') throw new Error(`caughtBecome=spectator not honoured, got ${caughtPlayer.role}`);
+  if (caughtPlayer.role !== 'spectator')
+    throw new Error(`caughtBecome=spectator not honoured, got ${caughtPlayer.role}`);
   if (seeker.state.result.winner !== 'seekers') throw new Error('wrong winner');
 
   // --- leaderboard --------------------------------------------------------
-  await waitFor(() => seeker.leaderboard.some((r) => r.id === seeker.id && r.found > 0), 'leaderboard updated', 5000);
+  await waitFor(
+    () => seeker.leaderboard.some((r) => r.id === seeker.id && r.found > 0),
+    'leaderboard updated',
+    5000
+  );
   const seekerRow = seeker.leaderboard.find((r) => r.id === seeker.id);
   const hiderRow = seeker.leaderboard.find((r) => r.id === hider.id);
-  console.log('leaderboard:', JSON.stringify(seeker.leaderboard.map((r) => [r.name, r.points, r.found, r.survived, r.caught, r.rounds])));
-  if (seekerRow.points !== seekerRow.found * 10 + seekerRow.survived * 20) throw new Error('points formula mismatch');
+  console.log(
+    'leaderboard:',
+    JSON.stringify(
+      seeker.leaderboard.map((r) => [r.name, r.points, r.found, r.survived, r.caught, r.rounds])
+    )
+  );
+  if (seekerRow.points !== seekerRow.found * 10 + seekerRow.survived * 20)
+    throw new Error('points formula mismatch');
   if (hiderRow.caught < 1) throw new Error('caught not recorded for the hider');
   if (seekerRow.rounds < 1 || hiderRow.rounds < 1) throw new Error('rounds not counted');
-  if (seeker.leaderboard[0].points < seeker.leaderboard[seeker.leaderboard.length - 1].points) throw new Error('leaderboard not sorted');
+  if (seeker.leaderboard[0].points < seeker.leaderboard[seeker.leaderboard.length - 1].points)
+    throw new Error('leaderboard not sorted');
   console.log('leaderboard recorded and sorted \u2713');
+
+  // The results card is dismissed per round, keyed on this, so it has to
+  // outlive the round it belongs to.
+  if (typeof seeker.state.huntStartedAt !== 'number')
+    throw new Error('huntStartedAt missing once the round is over');
+  console.log(
+    `round key survives into the results (huntStartedAt=${seeker.state.huntStartedAt}) \u2713`
+  );
+
+  // A finished round hands everyone back their ready flag.
+  if (seeker.state.players.some((p) => p.ready)) throw new Error('ready flags survived the round');
+  console.log('everyone back to idle after the round \u2713');
+
+  // The lobby has to stay usable while the results are still on screen —
+  // otherwise the only way to play again is a global reset.
+  seeker.socket.emit('ready', { ready: true });
+  await waitFor(
+    () => seeker.state.players.find((p) => p.id === seeker.id)?.ready,
+    'ready while over',
+    4000
+  );
+  seeker.socket.emit('settings', { hideSeconds: 12 });
+  await waitFor(() => seeker.state.settings.hideSeconds === 12, 'settings while over', 4000);
+  console.log('can ready up and change settings without resetting \u2713');
+  seeker.socket.emit('ready', { ready: false });
 
   seeker.socket.emit('reset');
   await waitFor(() => seeker.state.status === 'lobby', 'back to lobby');

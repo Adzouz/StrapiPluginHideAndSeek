@@ -4,7 +4,18 @@ const { STATUS, ROLE, PALETTE } = require('../constants');
 
 const MUTABLE_SETTINGS = ['hideSeconds', 'roundSeconds', 'caughtBecome', 'seekerCount'];
 
+/**
+ * How long a disconnected player keeps their seat between rounds. Long enough
+ * that reloading the admin does not lose your place in the lobby, short enough
+ * that someone who closed the tab is gone before anyone wonders.
+ */
+const DISCONNECT_GRACE_MS = 5000;
+
 const clamp01 = (n) => Math.min(1, Math.max(0, n));
+
+const CENTRE = { x: 0.5, y: 0.5 };
+
+const normalisePath = (path) => String(path ?? '').replace(/\/+$/, '') || '/';
 
 /**
  * The whole game lives in memory on a single Strapi node: a round is short,
@@ -21,6 +32,8 @@ module.exports = ({ strapi }) => {
     phaseEndsAt: null,
     roundEndsAt: null,
     startedAt: null,
+    huntStartedAt: null,
+    lastTickAt: Date.now(),
     result: null,
     players: new Map(),
     /** `${seekerId}:${hiderId}` -> timestamp the cursor lock started. */
@@ -64,18 +77,53 @@ module.exports = ({ strapi }) => {
     caught: false,
     page: null,
     pageAt: 0,
-    cursor: { x: 0.5, y: 0.5 },
+    cursor: { ...CENTRE },
+    /**
+     * Where the player actually is as far as the game is concerned. It trails
+     * the real cursor when a hider is cornered, which is what makes a hider
+     * catchable instead of a mouse-flick away.
+     */
+    gamePos: { ...CENTRE },
     lastMoveAt: 0,
+    /** Tabbed away: parked in the middle of the page and easy to find. */
+    away: false,
     disconnectedAt: null,
     foundCount: 0,
     /** Role this player was dealt at the start of the round, for the leaderboard. */
     startedAs: null,
     /** While in the future, this player is stuck on their current page. */
     lockedUntil: 0,
+    caughtAt: null,
+    /** Seekers only: last time they could see a hider, for the hint timer. */
+    lastSightingAt: 0,
+    hint: null,
   });
 
   const playerBySocket = (socketId) =>
     [...state.players.values()].find((p) => p.sockets.has(socketId));
+
+  /** The admin homepage: a truce. No lockdown, no catching, nothing. */
+  const safePath = () => normalisePath(strapi.config.get('admin.path', '/admin'));
+
+  const isSafe = (page) => config().safeZone && normalisePath(page) === safePath();
+
+  /** A hider sharing a page with a seeker, outside the safe zone, is slowed. */
+  const isSlowed = (player) =>
+    state.status === STATUS.HUNTING &&
+    player.role === ROLE.HIDER &&
+    !player.caught &&
+    Boolean(player.page) &&
+    config().hiderSpeedLimit > 0 &&
+    !isSafe(player.page) &&
+    [...state.players.values()].some(
+      (other) => other.role === ROLE.SEEKER && other.connected && other.page === player.page
+    );
+
+  /**
+   * Between rounds. `over` is not a separate screen to escape from — the lobby
+   * widget is the lobby, and it stays usable while the last result is still up.
+   */
+  const betweenRounds = () => state.status === STATUS.LOBBY || state.status === STATUS.OVER;
 
   const activeHiders = () =>
     [...state.players.values()].filter((p) => p.role === ROLE.HIDER && !p.caught);
@@ -113,16 +161,38 @@ module.exports = ({ strapi }) => {
       player.connected = false;
       player.disconnectedAt = Date.now();
       player.page = null;
-
-      // Nobody left to play against: wipe the player entirely while in lobby.
-      if (state.status === STATUS.LOBBY) {
-        state.players.delete(player.id);
-      }
+      player.ready = false;
     }
 
     touch();
 
     return player;
+  };
+
+  /**
+   * A deliberate exit — logging out — rather than a dropped connection. No
+   * grace period: they told us they are going.
+   */
+  const forget = (playerId) => {
+    const player = state.players.get(playerId);
+
+    if (!player) {
+      return;
+    }
+
+    if (betweenRounds()) {
+      state.players.delete(playerId);
+      touch();
+
+      return;
+    }
+
+    // Mid-round they still owe the forfeit timer.
+    player.connected = false;
+    player.disconnectedAt = Date.now();
+    player.page = null;
+    player.ready = false;
+    touch();
   };
 
   /* ------------------------------------------------------------------ *
@@ -132,7 +202,7 @@ module.exports = ({ strapi }) => {
   const setReady = (playerId, ready) => {
     const player = state.players.get(playerId);
 
-    if (!player || state.status !== STATUS.LOBBY) {
+    if (!player || !betweenRounds()) {
       return;
     }
 
@@ -141,7 +211,7 @@ module.exports = ({ strapi }) => {
   };
 
   const updateSettings = (patch = {}) => {
-    if (state.status !== STATUS.LOBBY) {
+    if (!betweenRounds()) {
       return;
     }
 
@@ -170,7 +240,7 @@ module.exports = ({ strapi }) => {
   };
 
   const start = () => {
-    if (![STATUS.LOBBY, STATUS.OVER].includes(state.status)) {
+    if (!betweenRounds()) {
       // Codes, not sentences: the admin panel owns the wording and the locale.
       return { ok: false, code: 'roundRunning' };
     }
@@ -188,9 +258,13 @@ module.exports = ({ strapi }) => {
 
     state.players.forEach((player) => {
       player.caught = false;
+      player.caughtAt = null;
       player.foundCount = 0;
       player.page = null;
       player.pageAt = 0;
+      player.hint = null;
+      player.lastSightingAt = 0;
+      player.gamePos = { ...player.cursor };
 
       if (!player.connected || !player.ready) {
         player.role = ROLE.SPECTATOR;
@@ -205,6 +279,7 @@ module.exports = ({ strapi }) => {
     state.holds.clear();
     state.result = null;
     state.startedAt = Date.now();
+    state.huntStartedAt = null;
     state.status = STATUS.COUNTDOWN;
     state.phaseEndsAt = Date.now() + config().countdownSeconds * 1000;
     state.roundEndsAt = null;
@@ -226,8 +301,10 @@ module.exports = ({ strapi }) => {
     state.players.forEach((player) => {
       player.role = ROLE.SPECTATOR;
       player.caught = false;
+      player.caughtAt = null;
       player.page = null;
       player.pageAt = 0;
+      player.hint = null;
     });
 
     emit({ type: 'phase', status: state.status });
@@ -276,6 +353,31 @@ module.exports = ({ strapi }) => {
     }
 
     player.cursor = next;
+
+    if (!isSlowed(player)) {
+      player.gamePos = next;
+    }
+  };
+
+  /**
+   * A player who tabs away stops sending cursor moves, which used to make them
+   * invisible in practice. Park them in the middle of their page instead: still
+   * in the game, and easy to find.
+   */
+  const setAway = (playerId, away) => {
+    const player = state.players.get(playerId);
+
+    if (!player || player.away === Boolean(away)) {
+      return;
+    }
+
+    player.away = Boolean(away);
+
+    if (player.away) {
+      player.cursor = { ...CENTRE };
+      player.gamePos = { ...CENTRE };
+      player.lastMoveAt = Date.now();
+    }
   };
 
   /* ------------------------------------------------------------------ *
@@ -298,6 +400,9 @@ module.exports = ({ strapi }) => {
     state.holds.clear();
     state.players.forEach((player) => {
       player.lockedUntil = 0;
+      // Everyone opts in again for the next round rather than being carried
+      // into it by a stale tick from the last one.
+      player.ready = false;
     });
 
     // Only players who were actually dealt a role count towards the leaderboard.
@@ -310,7 +415,9 @@ module.exports = ({ strapi }) => {
         startedAs: player.startedAs,
         found: player.foundCount,
         caught: player.caught,
-        survived: player.startedAs === ROLE.HIDER && !player.caught,
+        // Sitting out the round in the safe zone is allowed, but it does not
+        // count as surviving — otherwise the homepage would win every game.
+        survived: player.startedAs === ROLE.HIDER && !player.caught && !isSafe(player.page),
       }));
 
     emit({ type: 'over', result: state.result, participants });
@@ -318,10 +425,15 @@ module.exports = ({ strapi }) => {
   };
 
   const catchPlayer = (seeker, hider) => {
+    const at = Date.now();
+
     hider.caught = true;
+    hider.caughtAt = at;
     hider.lockedUntil = 0;
     hider.role = settings().caughtBecome === ROLE.SEEKER ? ROLE.SEEKER : ROLE.SPECTATOR;
     seeker.foundCount += 1;
+    seeker.lastSightingAt = at;
+    seeker.hint = null;
 
     [...state.holds.keys()]
       .filter((key) => key.endsWith(`:${hider.id}`))
@@ -333,6 +445,8 @@ module.exports = ({ strapi }) => {
       seekerName: seeker.name,
       hiderId: hider.id,
       hiderName: hider.name,
+      becomes: hider.role,
+      survivedMs: at - (state.huntStartedAt ?? at),
     });
     touch();
   };
@@ -341,6 +455,37 @@ module.exports = ({ strapi }) => {
    * The standoff: the moment a seeker and a hider share a page, neither can
    * leave for `lockdownMs`. The hider has to dodge instead of running.
    */
+  /**
+   * Cornered hiders move at a capped speed. Their marker chases the real cursor
+   * instead of being it, so a fast flick buys distance over time rather than
+   * instantly — the difference between a dodge and a teleport.
+   */
+  const updatePositions = (dtMs) => {
+    const { hiderSpeedLimit } = config();
+    const maxStep = (hiderSpeedLimit * dtMs) / 1000;
+
+    state.players.forEach((player) => {
+      if (!isSlowed(player)) {
+        player.gamePos = { ...player.cursor };
+        return;
+      }
+
+      const dx = player.cursor.x - player.gamePos.x;
+      const dy = player.cursor.y - player.gamePos.y;
+      const distance = Math.hypot(dx, dy);
+
+      if (distance <= maxStep || distance === 0) {
+        player.gamePos = { ...player.cursor };
+        return;
+      }
+
+      player.gamePos = {
+        x: clamp01(player.gamePos.x + (dx / distance) * maxStep),
+        y: clamp01(player.gamePos.y + (dy / distance) * maxStep),
+      };
+    });
+  };
+
   const evaluateLockdowns = (at) => {
     const { lockdownMs } = config();
     const seekers = [...state.players.values()].filter(
@@ -348,6 +493,10 @@ module.exports = ({ strapi }) => {
     );
 
     seekers.forEach((seeker) => {
+      if (isSafe(seeker.page)) {
+        return;
+      }
+
       activeHiders()
         .filter((hider) => hider.connected && hider.page === seeker.page)
         .forEach((hider) => {
@@ -371,6 +520,10 @@ module.exports = ({ strapi }) => {
     );
 
     seekers.forEach((seeker) => {
+      if (isSafe(seeker.page)) {
+        return;
+      }
+
       activeHiders()
         .filter((hider) => hider.connected && hider.page === seeker.page)
         .forEach((hider) => {
@@ -379,10 +532,16 @@ module.exports = ({ strapi }) => {
             at - hider.lastMoveAt >= cfg.idleRevealMs ||
             at - Math.max(seeker.pageAt, hider.pageAt) >= cfg.graceMs;
 
+          // The hider's slowed marker is what gets caught, not their real cursor.
           const distance = Math.hypot(
-            seeker.cursor.x - hider.cursor.x,
-            seeker.cursor.y - hider.cursor.y
+            seeker.cursor.x - hider.gamePos.x,
+            seeker.cursor.y - hider.gamePos.y
           );
+
+          if (revealed) {
+            seeker.lastSightingAt = at;
+            seeker.hint = null;
+          }
 
           if (!revealed || distance > cfg.catchRadius) {
             state.holds.delete(key);
@@ -403,7 +562,9 @@ module.exports = ({ strapi }) => {
     const cfg = config();
 
     activeHiders()
-      .filter((p) => !p.connected && p.disconnectedAt && at - p.disconnectedAt >= cfg.forfeitAfterMs)
+      .filter(
+        (p) => !p.connected && p.disconnectedAt && at - p.disconnectedAt >= cfg.forfeitAfterMs
+      )
       .forEach((player) => {
         player.caught = true;
         player.role = ROLE.SPECTATOR;
@@ -412,9 +573,76 @@ module.exports = ({ strapi }) => {
       });
   };
 
+  /**
+   * A seeker who has drawn a blank for long enough gets pointed at somebody.
+   * The hint names a page, not a person, and never says who is on it.
+   */
+  const evaluateHints = (at) => {
+    const cfg = config();
+
+    state.players.forEach((seeker) => {
+      if (seeker.role !== ROLE.SEEKER || !seeker.connected) {
+        return;
+      }
+
+      if (!seeker.lastSightingAt) {
+        seeker.lastSightingAt = state.huntStartedAt ?? at;
+      }
+
+      if (at - seeker.lastSightingAt < cfg.hintAfterMs) {
+        return;
+      }
+
+      if (seeker.hint && at - seeker.hint.at < cfg.hintRepeatMs) {
+        return;
+      }
+
+      const targets = activeHiders().filter(
+        (hider) => hider.connected && hider.page && hider.page !== seeker.page
+      );
+
+      if (targets.length === 0) {
+        seeker.hint = null;
+        return;
+      }
+
+      const target = targets[Math.floor(Math.random() * targets.length)];
+
+      seeker.hint = { path: target.page, at };
+      touch();
+    });
+  };
+
+  /**
+   * Drops players who are no longer here. Only between rounds: mid-round a
+   * disconnection is the forfeit timer's business, not a reason to erase
+   * somebody who is about to reconnect.
+   */
+  const sweepDisconnected = (at) => {
+    if (!betweenRounds()) {
+      return;
+    }
+
+    state.players.forEach((player) => {
+      if (player.connected) {
+        return;
+      }
+
+      if (at - (player.disconnectedAt ?? at) < DISCONNECT_GRACE_MS) {
+        return;
+      }
+
+      state.players.delete(player.id);
+      touch();
+    });
+  };
+
   const tick = () => {
     const at = Date.now();
     const cfg = config();
+    const dtMs = Math.min(200, Math.max(0, at - state.lastTickAt));
+
+    state.lastTickAt = at;
 
     if (state.status === STATUS.COUNTDOWN && at >= state.phaseEndsAt) {
       state.status = STATUS.HIDING;
@@ -426,22 +654,30 @@ module.exports = ({ strapi }) => {
     if (state.status === STATUS.HIDING && at >= state.phaseEndsAt) {
       state.status = STATUS.HUNTING;
       state.phaseEndsAt = null;
+      state.huntStartedAt = at;
       state.roundEndsAt = at + settings().roundSeconds * 1000;
       // Everyone gets a fresh grace window the moment the hunt opens.
       state.players.forEach((player) => {
         player.pageAt = at;
+        player.lastSightingAt = at;
       });
       emit({ type: 'phase', status: state.status });
       touch();
     }
+
+    // Runs in every phase: a round ending is exactly when the players who
+    // dropped out mid-round need clearing out.
+    sweepDisconnected(at);
 
     if (state.status !== STATUS.HUNTING) {
       return;
     }
 
     evaluateForfeits(at);
+    updatePositions(dtMs);
     evaluateLockdowns(at);
     evaluateCatches(at);
+    evaluateHints(at);
 
     if (activeHiders().length === 0) {
       finish('seekers');
@@ -479,6 +715,9 @@ module.exports = ({ strapi }) => {
     settings: settings(),
     /** Exposed so the client can scale the lockdown countdown bar. */
     lockdownMs: config().lockdownMs,
+    /** The homepage path, so the client can badge the safe zone. */
+    safePath: config().safeZone ? safePath() : null,
+    huntStartedAt: state.huntStartedAt,
     result: state.result,
     players: [...state.players.values()].map((player) => ({
       id: player.id,
@@ -518,7 +757,11 @@ module.exports = ({ strapi }) => {
         return;
       }
 
-      if (other.role === ROLE.SPECTATOR) {
+      // Spectators are out of the round, so they get to watch everything —
+      // including each other. Players never see them.
+      const watching = player.role === ROLE.SPECTATOR;
+
+      if (other.role === ROLE.SPECTATOR && !watching) {
         return;
       }
 
@@ -547,14 +790,36 @@ module.exports = ({ strapi }) => {
         name: other.name,
         color: other.color,
         role: other.role,
-        x: other.cursor.x,
-        y: other.cursor.y,
+        caught: other.caught,
+        away: other.away,
+        x: other.gamePos.x,
+        y: other.gamePos.y,
         pinging,
         catchProgress,
       });
     });
 
     return peers;
+  };
+
+  /**
+   * Who a spectator can follow, and where they are. Only ever sent to players
+   * who are already out of the round.
+   */
+  const followRoster = (player) => {
+    if (!player || player.role !== ROLE.SPECTATOR || state.status !== STATUS.HUNTING) {
+      return null;
+    }
+
+    return [...state.players.values()]
+      .filter((other) => other.startedAs && other.connected && other.id !== player.id)
+      .map((other) => ({
+        id: other.id,
+        name: other.name,
+        role: other.role,
+        caught: other.caught,
+        page: other.page,
+      }));
   };
 
   const viewFor = (playerId) => {
@@ -569,6 +834,13 @@ module.exports = ({ strapi }) => {
             ready: player.ready,
             color: player.color,
             lockedUntil: player.lockedUntil,
+            away: player.away,
+            safe: Boolean(player.page) && isSafe(player.page),
+            slowed: isSlowed(player),
+            // Your own slowed marker, so you can see what the seeker is chasing.
+            position: { x: player.gamePos.x, y: player.gamePos.y },
+            hint: player.role === ROLE.SEEKER ? player.hint : null,
+            follow: followRoster(player),
             serverTime: Date.now(),
           }
         : null,
@@ -588,6 +860,8 @@ module.exports = ({ strapi }) => {
     reset,
     setPage,
     setCursor,
+    setAway,
+    forget,
     tick,
     publicState,
     viewFor,

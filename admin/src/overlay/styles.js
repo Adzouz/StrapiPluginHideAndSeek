@@ -32,9 +32,22 @@ const CSS = `
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  background: var(--hns-color);
+  background: var(--hns-color, #7b79ff);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
   transition: transform 120ms ease;
+}
+/* Role, not player, decides the colour: you need to read a page at a glance. */
+.hns-ghost--seeker { --hns-color: #d02b20; }
+.hns-ghost--hider { --hns-color: #328048; }
+.hns-ghost--spectator { --hns-color: #6b6b80; opacity: 0.45; }
+.hns-ghost--away .hns-ghost__body { filter: grayscale(0.4); }
+.hns-ghost--own {
+  opacity: 0.55;
+}
+.hns-ghost--own .hns-ghost__body {
+  background: transparent;
+  border: 2px dashed #328048;
+  box-shadow: none;
 }
 .hns-ghost__ring {
   position: absolute;
@@ -132,23 +145,41 @@ const CSS = `
 }
 @keyframes hns-danger { from { opacity: 0.35; } to { opacity: 1; } }
 
-/* ------------------------------------------------------------- lockdown */
-.hns-lock {
+/* ---------------------------------------------------------- top centre */
+.hns-topcentre {
   position: absolute;
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.hns-pill {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: 999px;
   font-size: 13px;
-  font-weight: 700;
-  color: #ffd046;
-  background: rgba(20, 20, 32, 0.92);
-  border: 1px solid #ffd046;
+  font-weight: 600;
+  background: rgba(20, 20, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+.hns-pill--seeker { border-color: #d02b20; color: #ff9a90; }
+.hns-pill--hider { border-color: #328048; color: #8fd6a6; }
+.hns-pill--spectator { border-color: #6b6b80; color: #c6c6d4; }
+.hns-pill--safe { border-color: #66b7f1; color: #9ed4f7; }
+.hns-pill--hint { border-color: #ffd046; color: #ffd046; }
+
+/* ------------------------------------------------------------- lockdown */
+.hns-lock {
+  color: #ffd046;
+  border-color: #ffd046;
+  font-weight: 700;
 }
 .hns-lock__bar {
   width: 70px;
@@ -162,6 +193,80 @@ const CSS = `
   height: 100%;
   background: #ffd046;
   transition: width 200ms linear;
+}
+
+/* --------------------------------------------------------------- follow */
+.hns-follow {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgba(20, 20, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+.hns-follow__btn {
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+}
+.hns-follow__btn:hover { background: rgba(255, 255, 255, 0.18); }
+.hns-follow__btn:disabled { opacity: 0.3; cursor: default; }
+.hns-follow__label {
+  min-width: 140px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 8px;
+}
+.hns-follow__sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* ---------------------------------------------------------------- hint */
+/* Applied to the admin's own links, so it must survive their styles. */
+.hns-hint-target {
+  position: relative;
+  animation: hns-hint 1.2s ease-in-out infinite !important;
+  border-radius: 4px;
+  outline: 2px solid #ffd046 !important;
+  outline-offset: 2px;
+}
+@keyframes hns-hint {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 208, 70, 0.6); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 208, 70, 0); }
+}
+
+/* ------------------------------------------------ external link guard */
+.hns-external {
+  pointer-events: none !important;
+  opacity: 0.35 !important;
+  cursor: default !important;
+}
+
+/* ------------------------------------------------- widget delete guard */
+/* Pulling the lobby widget out mid-round would strand everyone, so the
+   header actions go away until the round is over. */
+body.hns-in-game section[data-strapi-widget-id^="plugin::hide-and-seek."] > header button {
+  display: none !important;
 }
 
 /* ---------------------------------------------------------------- toast */

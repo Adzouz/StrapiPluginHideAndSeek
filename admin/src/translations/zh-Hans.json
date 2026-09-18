@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "你找到了 {name}！",
   "hide-and-seek.toast.someoneFound": "{seeker} 找到了 {hider}",
   "hide-and-seek.toast.left": "{name} 离开了游戏",
-  "hide-and-seek.toast.locked": "被困住 —— 现在还走不了！"
+  "hide-and-seek.toast.locked": "被困住 —— 现在还走不了！",
+  "hide-and-seek.overlay.youAreHider": "你是躲藏者",
+  "hide-and-seek.overlay.youAreSpectator": "你是旁观者",
+  "hide-and-seek.overlay.safeZone": "安全区",
+  "hide-and-seek.overlay.hintHere": "有人在这边",
+  "hide-and-seek.overlay.hintPath": "有人在 {path}",
+  "hide-and-seek.overlay.caughtTitle": "被抓到了！",
+  "hide-and-seek.overlay.caughtBy": "{name} 找到了你。",
+  "hide-and-seek.overlay.lastedFor": "你坚持了 {time}。",
+  "hide-and-seek.overlay.nowSeeker": "你现在是找人者了 —— 去找出其他人。",
+  "hide-and-seek.overlay.nowSpectator": "你出局了。看看结局吧。",
+  "hide-and-seek.overlay.follow": "正在跟随",
+  "hide-and-seek.overlay.followNobody": "没有可跟随的人",
+  "hide-and-seek.overlay.followPrev": "上一位玩家",
+  "hide-and-seek.overlay.followNext": "下一位玩家",
+  "hide-and-seek.overlay.you": "你",
+  "hide-and-seek.toast.external": "游戏进行中，暂时不行。"
 }

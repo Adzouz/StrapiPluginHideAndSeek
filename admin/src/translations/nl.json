@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "Je hebt {name} gevonden!",
   "hide-and-seek.toast.someoneFound": "{seeker} heeft {hider} gevonden",
   "hide-and-seek.toast.left": "{name} heeft het spel verlaten",
-  "hide-and-seek.toast.locked": "Vastgezet — je kunt nu nog niet weg!"
+  "hide-and-seek.toast.locked": "Vastgezet — je kunt nu nog niet weg!",
+  "hide-and-seek.overlay.youAreHider": "Jij bent een verstopper",
+  "hide-and-seek.overlay.youAreSpectator": "Jij bent toeschouwer",
+  "hide-and-seek.overlay.safeZone": "Veilige zone",
+  "hide-and-seek.overlay.hintHere": "Hier ergens zit iemand",
+  "hide-and-seek.overlay.hintPath": "Iemand is op {path}",
+  "hide-and-seek.overlay.caughtTitle": "Gepakt!",
+  "hide-and-seek.overlay.caughtBy": "{name} heeft je gevonden.",
+  "hide-and-seek.overlay.lastedFor": "Je hield het {time} vol.",
+  "hide-and-seek.overlay.nowSeeker": "Je bent nu zoeker — vind de rest.",
+  "hide-and-seek.overlay.nowSpectator": "Je ligt eruit. Kijk hoe het afloopt.",
+  "hide-and-seek.overlay.follow": "Volgt",
+  "hide-and-seek.overlay.followNobody": "Niemand om te volgen",
+  "hide-and-seek.overlay.followPrev": "Vorige speler",
+  "hide-and-seek.overlay.followNext": "Volgende speler",
+  "hide-and-seek.overlay.you": "Jij",
+  "hide-and-seek.toast.external": "Niet tijdens het spel."
 }

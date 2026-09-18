@@ -44,7 +44,8 @@ export const defaults = {
   'leaderboard.players': '{count} players all-time',
   'leaderboard.points': 'points',
   'leaderboard.pointsHint': '10 points per player found, 20 per round survived as a hider',
-  'leaderboard.rowHint': '{found} found · {survived} escapes · caught {caught} times in {rounds} rounds',
+  'leaderboard.rowHint':
+    '{found} found · {survived} escapes · caught {caught} times in {rounds} rounds',
 
   'overlay.go': 'GO',
   'overlay.youAreSeeker': 'You are the seeker',
@@ -56,6 +57,21 @@ export const defaults = {
   'overlay.huntOpens': 'The hunt opens in {seconds}s. Then find every cursor.',
   'overlay.hideNow': 'Hide!',
   'overlay.lockedIn': 'Locked in',
+  'overlay.you': 'You',
+  'overlay.youAreHider': 'You are a hider',
+  'overlay.youAreSpectator': 'You are a spectator',
+  'overlay.safeZone': 'Safe zone',
+  'overlay.hintHere': 'Someone is through here',
+  'overlay.hintPath': 'Someone is on {path}',
+  'overlay.caughtTitle': 'Caught!',
+  'overlay.caughtBy': '{name} found you.',
+  'overlay.lastedFor': 'You lasted {time}.',
+  'overlay.nowSeeker': 'You are a seeker now — go find the rest.',
+  'overlay.nowSpectator': 'You are out. Watch the rest unfold.',
+  'overlay.follow': 'Following',
+  'overlay.followNobody': 'Nobody to follow',
+  'overlay.followPrev': 'Previous player',
+  'overlay.followNext': 'Next player',
   'overlay.roleSeeker': 'Seeker',
   'overlay.roleHider': 'Hider',
   'overlay.roleSpectator': 'Spectator',
@@ -73,6 +89,7 @@ export const defaults = {
   'toast.someoneFound': '{seeker} found {hider}',
   'toast.left': '{name} left the game',
   'toast.locked': 'Locked in — you cannot leave yet!',
+  'toast.external': 'Not while the game is on.',
 };
 
 /** Descriptor for react-intl, inside the admin tree. */

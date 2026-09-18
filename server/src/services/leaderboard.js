@@ -42,9 +42,7 @@ module.exports = ({ strapi }) => {
 
     return Object.values(data)
       .map((row) => ({ ...row, points: points(row) }))
-      .sort(
-        (a, b) => b.points - a.points || b.found - a.found || a.name.localeCompare(b.name)
-      )
+      .sort((a, b) => b.points - a.points || b.found - a.found || a.name.localeCompare(b.name))
       .slice(0, MAX_ROWS);
   };
 

@@ -1,6 +1,6 @@
 {
   "name": "strapi-plugin-hide-and-seek",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Play hide and seek with your teammates inside the Strapi admin panel.",
   "keywords": [
     "strapi",
@@ -43,21 +43,49 @@
   ],
   "scripts": {
     "build": "strapi-plugin build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky || true",
     "prepublishOnly": "npm run build",
+    "test:disconnect": "node tests/disconnect.mjs",
     "test:e2e": "node tests/e2e.mjs",
+    "test:mechanics": "node tests/mechanics.mjs",
+    "test:spectator": "node tests/spectator.mjs",
     "verify": "strapi-plugin verify",
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link"
+  },
+  "lint-staged": {
+    "*.{js,jsx,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@eslint/js": "^9.39.5",
     "@strapi/design-system": "^2.0.0",
     "@strapi/icons": "^2.0.0",
     "@strapi/sdk-plugin": "^5.3.2",
     "@strapi/strapi": "^5.13.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.8",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.0.0",

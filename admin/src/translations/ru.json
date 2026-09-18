@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "Вы нашли {name}!",
   "hide-and-seek.toast.someoneFound": "{seeker} нашёл {hider}",
   "hide-and-seek.toast.left": "{name} покинул игру",
-  "hide-and-seek.toast.locked": "Заперт — уйти пока нельзя!"
+  "hide-and-seek.toast.locked": "Заперт — уйти пока нельзя!",
+  "hide-and-seek.overlay.youAreHider": "Вы прячетесь",
+  "hide-and-seek.overlay.youAreSpectator": "Вы зритель",
+  "hide-and-seek.overlay.safeZone": "Безопасная зона",
+  "hide-and-seek.overlay.hintHere": "Кто-то здесь неподалёку",
+  "hide-and-seek.overlay.hintPath": "Кто-то на {path}",
+  "hide-and-seek.overlay.caughtTitle": "Поймали!",
+  "hide-and-seek.overlay.caughtBy": "{name} нашёл вас.",
+  "hide-and-seek.overlay.lastedFor": "Вы продержались {time}.",
+  "hide-and-seek.overlay.nowSeeker": "Теперь вы водящий — найдите остальных.",
+  "hide-and-seek.overlay.nowSpectator": "Вы выбыли. Смотрите, чем всё кончится.",
+  "hide-and-seek.overlay.follow": "Следите за",
+  "hide-and-seek.overlay.followNobody": "Не за кем следить",
+  "hide-and-seek.overlay.followPrev": "Предыдущий игрок",
+  "hide-and-seek.overlay.followNext": "Следующий игрок",
+  "hide-and-seek.overlay.you": "Вы",
+  "hide-and-seek.toast.external": "Не во время игры."
 }

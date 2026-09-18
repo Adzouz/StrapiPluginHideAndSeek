@@ -56,5 +56,21 @@
   "hide-and-seek.toast.youFound": "{name} を見つけました！",
   "hide-and-seek.toast.someoneFound": "{seeker} が {hider} を見つけました",
   "hide-and-seek.toast.left": "{name} がゲームから退出しました",
-  "hide-and-seek.toast.locked": "足止め中 — まだ移動できません！"
+  "hide-and-seek.toast.locked": "足止め中 — まだ移動できません！",
+  "hide-and-seek.overlay.youAreHider": "あなたは隠れる人です",
+  "hide-and-seek.overlay.youAreSpectator": "あなたは観戦者です",
+  "hide-and-seek.overlay.safeZone": "セーフゾーン",
+  "hide-and-seek.overlay.hintHere": "この先に誰かいます",
+  "hide-and-seek.overlay.hintPath": "誰かが {path} にいます",
+  "hide-and-seek.overlay.caughtTitle": "見つかった！",
+  "hide-and-seek.overlay.caughtBy": "{name} に見つかりました。",
+  "hide-and-seek.overlay.lastedFor": "{time} 逃げ切りました。",
+  "hide-and-seek.overlay.nowSeeker": "あなたも鬼になりました — 残りを探しましょう。",
+  "hide-and-seek.overlay.nowSpectator": "脱落しました。最後まで見届けましょう。",
+  "hide-and-seek.overlay.follow": "追跡中",
+  "hide-and-seek.overlay.followNobody": "追跡できる人がいません",
+  "hide-and-seek.overlay.followPrev": "前のプレイヤー",
+  "hide-and-seek.overlay.followNext": "次のプレイヤー",
+  "hide-and-seek.overlay.you": "あなた",
+  "hide-and-seek.toast.external": "ゲーム中は開けません。"
 }
