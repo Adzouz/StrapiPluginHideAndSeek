@@ -1,5 +1,10 @@
 # Hide & Seek for Strapi
 
+[![npm version](https://img.shields.io/npm/v/strapi-plugin-hide-and-seek.svg)](https://www.npmjs.com/package/strapi-plugin-hide-and-seek)
+[![npm downloads](https://img.shields.io/npm/dm/strapi-plugin-hide-and-seek.svg)](https://www.npmjs.com/package/strapi-plugin-hide-and-seek)
+[![Strapi](https://img.shields.io/badge/Strapi-%3E%3D5.13-4945ff.svg)](https://strapi.io)
+[![license](https://img.shields.io/npm/l/strapi-plugin-hide-and-seek.svg)](./LICENSE)
+
 Hide and seek, played inside the Strapi admin panel.
 
 Every admin user is a player, every admin route is a hiding spot, and the mouse
@@ -406,6 +411,32 @@ truth.
 
 Translations beyond English were written without native review — corrections are
 very welcome.
+
+## Releasing
+
+Releases are published from GitHub Actions, not from a laptop. Pushing a `v*`
+tag runs `.github/workflows/release.yml`, which refuses to publish if the tag and
+`package.json` disagree, then publishes with
+[npm provenance](https://docs.npmjs.com/generating-provenance-statements) — so
+the npm page shows which commit and workflow run actually built the tarball.
+
+```bash
+npm version minor          # or patch / major; updates package.json
+git push && git push --tags
+```
+
+One-time setup on the npm side, either:
+
+- **Trusted publishing** (no secret to leak): on npmjs.com, under the package's
+  settings, add a trusted publisher for this repository and
+  `release.yml`. Then drop the `NODE_AUTH_TOKEN` line from the workflow.
+- **Or an automation token**: create a granular access token with publish rights
+  and 2FA bypass, and add it to the repository as the `NPM_TOKEN` secret. The
+  workflow uses this by default.
+
+Every push and pull request also runs `.github/workflows/ci.yml`: lint, format
+check, build, and `strapi-plugin verify`. The game suites are not part of CI —
+they need a live Strapi with real admin users, so they stay a local step.
 
 ## Contributing
 
