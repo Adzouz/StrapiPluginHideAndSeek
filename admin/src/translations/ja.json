@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "前のプレイヤー",
   "hide-and-seek.overlay.followNext": "次のプレイヤー",
   "hide-and-seek.overlay.you": "あなた",
-  "hide-and-seek.toast.external": "ゲーム中は開けません。"
+  "hide-and-seek.toast.external": "ゲーム中は開けません。",
+  "hide-and-seek.toast.superseded": "ゲームは別のタブに移りました。ここをクリックすると戻せます。",
+  "hide-and-seek.lobby.mode": "モード",
+  "hide-and-seek.lobby.modeClassic": "かくれんぼ",
+  "hide-and-seek.lobby.modeManhunt": "一斉追跡",
+  "hide-and-seek.lobby.prey": "標的",
+  "hide-and-seek.lobby.preyRandom": "ランダム",
+  "hide-and-seek.overlay.youArePrey": "あなたが標的です — 逃げて",
+  "hide-and-seek.overlay.huntTarget": "{name} を追え",
+  "hide-and-seek.overlay.preyCaught": "{name} は {time} 持ちこたえました",
+  "hide-and-seek.overlay.preyEscaped": "{name} は {time} 後に逃げ切りました"
 }

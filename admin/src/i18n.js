@@ -13,6 +13,11 @@ export const defaults = {
 
   'lobby.connecting': 'Connecting',
   'lobby.waiting': 'Waiting for the game server…',
+  'lobby.mode': 'Mode',
+  'lobby.modeClassic': 'hide & seek',
+  'lobby.modeManhunt': 'manhunt',
+  'lobby.prey': 'Hunted',
+  'lobby.preyRandom': 'random',
   'lobby.caughtMode': 'Caught mode',
   'lobby.hide': 'Hide',
   'lobby.limit': 'Limit',
@@ -59,6 +64,10 @@ export const defaults = {
   'overlay.lockedIn': 'Locked in',
   'overlay.you': 'You',
   'overlay.youAreHider': 'You are a hider',
+  'overlay.youArePrey': 'You are the prey — run',
+  'overlay.huntTarget': 'Hunt {name}',
+  'overlay.preyCaught': '{name} lasted {time}',
+  'overlay.preyEscaped': '{name} got away after {time}',
   'overlay.youAreSpectator': 'You are a spectator',
   'overlay.safeZone': 'Safe zone',
   'overlay.hintHere': 'Someone is through here',
@@ -90,6 +99,7 @@ export const defaults = {
   'toast.left': '{name} left the game',
   'toast.locked': 'Locked in — you cannot leave yet!',
   'toast.external': 'Not while the game is on.',
+  'toast.superseded': 'The game moved to your other tab. Click here to bring it back.',
 };
 
 /** Descriptor for react-intl, inside the admin tree. */

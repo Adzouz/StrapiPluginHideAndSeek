@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Vorheriger Spieler",
   "hide-and-seek.overlay.followNext": "Nächster Spieler",
   "hide-and-seek.overlay.you": "Du",
-  "hide-and-seek.toast.external": "Nicht während des Spiels."
+  "hide-and-seek.toast.external": "Nicht während des Spiels.",
+  "hide-and-seek.toast.superseded": "Das Spiel läuft jetzt in deinem anderen Tab. Klicke hier, um es zurückzuholen.",
+  "hide-and-seek.lobby.mode": "Modus",
+  "hide-and-seek.lobby.modeClassic": "Verstecken",
+  "hide-and-seek.lobby.modeManhunt": "Hetzjagd",
+  "hide-and-seek.lobby.prey": "Gejagt",
+  "hide-and-seek.lobby.preyRandom": "zufällig",
+  "hide-and-seek.overlay.youArePrey": "Du bist die Beute — lauf",
+  "hide-and-seek.overlay.huntTarget": "Jagt {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} hat {time} durchgehalten",
+  "hide-and-seek.overlay.preyEscaped": "{name} ist nach {time} entkommen"
 }

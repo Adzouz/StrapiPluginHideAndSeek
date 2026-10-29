@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Vorige speler",
   "hide-and-seek.overlay.followNext": "Volgende speler",
   "hide-and-seek.overlay.you": "Jij",
-  "hide-and-seek.toast.external": "Niet tijdens het spel."
+  "hide-and-seek.toast.external": "Niet tijdens het spel.",
+  "hide-and-seek.toast.superseded": "Het spel is naar je andere tabblad verhuisd. Klik hier om het terug te halen.",
+  "hide-and-seek.lobby.mode": "Modus",
+  "hide-and-seek.lobby.modeClassic": "verstoppertje",
+  "hide-and-seek.lobby.modeManhunt": "klopjacht",
+  "hide-and-seek.lobby.prey": "Opgejaagd",
+  "hide-and-seek.lobby.preyRandom": "willekeurig",
+  "hide-and-seek.overlay.youArePrey": "Jij bent de prooi — rennen",
+  "hide-and-seek.overlay.huntTarget": "Jaag op {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} hield het {time} vol",
+  "hide-and-seek.overlay.preyEscaped": "{name} ontsnapte na {time}"
 }

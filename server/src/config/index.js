@@ -1,6 +1,6 @@
 'use strict';
 
-const { ROLE } = require('../constants');
+const { MODE, ROLE } = require('../constants');
 
 module.exports = {
   default: {
@@ -17,7 +17,7 @@ module.exports = {
      */
     graceMs: 0,
     /** Catch distance, as a fraction of the viewport diagonal. */
-    catchRadius: 0.06,
+    catchRadius: 0.09,
     /** How long the seeker must keep the cursor on a hider to catch them. */
     catchHoldMs: 800,
     /** A hider whose cursor stops moving this long gets revealed, grace or not. */
@@ -26,16 +26,25 @@ module.exports = {
      * When a seeker and a hider share a page, both are locked in for this long.
      * Without it the hider just clicks away the moment the seeker walks in.
      */
-    lockdownMs: 4000,
+    lockdownMs: 15000,
     /**
      * How fast a cornered hider's marker can move, in viewport widths per
      * second, while a seeker shares their page. Flicking the mouse across the
      * screen no longer teleports them out of reach — they have to dodge.
      * Set to 0 to disable the slowdown.
      */
-    hiderSpeedLimit: 0.55,
+    hiderSpeedLimit: 0.3,
     /** The admin homepage is a safe zone: no lockdown, no catching. */
     safeZone: true,
+    /**
+     * Query parameters that are part of *where you are*, rather than how you are
+     * looking at it. The Media Library keeps the open folder in `folder` and
+     * `folderPath`, so without these every folder is one room and everybody sees
+     * each other regardless of which one they opened. Filters, sort and
+     * pagination are deliberately not here: two people browsing the same page
+     * with different filters are still in the same place.
+     */
+    pageQueryKeys: ['folder', 'folderPath'],
     /** A seeker who has not seen anybody for this long gets a nudge. */
     hintAfterMs: 45000,
     /** How often the nudge picks a fresh target. */
@@ -44,6 +53,19 @@ module.exports = {
     caughtBecome: ROLE.SEEKER,
     /** How many seekers are drawn at the start of a round. */
     seekerCount: 1,
+    /**
+     * 'classic' deals one or more seekers against the rest. 'manhunt' puts a
+     * single named player against the entire room — everyone else is a seeker.
+     */
+    mode: MODE.CLASSIC,
+    /** Manhunt only: who everybody is after. Falls back to a random player. */
+    preyId: null,
+    /**
+     * Manhunt only. Being frozen in a room with a dozen hunters is an instant
+     * catch, so the prey is never locked in — they can always run. The hunters
+     * still are, which is what stops the swarm simply taking turns.
+     */
+    preyEscapesLockdown: true,
     /**
      * How long a disconnected player is held mid-round before being dropped
      * from it. Long enough to survive an accidental reload, short enough that a
@@ -94,6 +116,14 @@ module.exports = {
 
     if (config.safeZone !== undefined && typeof config.safeZone !== 'boolean') {
       throw new Error('[hide-and-seek] config.safeZone must be a boolean');
+    }
+
+    if (
+      config.pageQueryKeys !== undefined &&
+      (!Array.isArray(config.pageQueryKeys) ||
+        config.pageQueryKeys.some((key) => typeof key !== 'string'))
+    ) {
+      throw new Error('[hide-and-seek] config.pageQueryKeys must be an array of strings');
     }
 
     if (

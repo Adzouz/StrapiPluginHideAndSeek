@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Jugador anterior",
   "hide-and-seek.overlay.followNext": "Jugador siguiente",
   "hide-and-seek.overlay.you": "Tú",
-  "hide-and-seek.toast.external": "Ahora no, la partida está en curso."
+  "hide-and-seek.toast.external": "Ahora no, la partida está en curso.",
+  "hide-and-seek.toast.superseded": "La partida se ha movido a tu otra pestaña. Haz clic aquí para recuperarla.",
+  "hide-and-seek.lobby.mode": "Modo",
+  "hide-and-seek.lobby.modeClassic": "escondite",
+  "hide-and-seek.lobby.modeManhunt": "cacería",
+  "hide-and-seek.lobby.prey": "Perseguido",
+  "hide-and-seek.lobby.preyRandom": "al azar",
+  "hide-and-seek.overlay.youArePrey": "Eres la presa: corre",
+  "hide-and-seek.overlay.huntTarget": "Caza a {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} aguantó {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} escapó tras {time}"
 }

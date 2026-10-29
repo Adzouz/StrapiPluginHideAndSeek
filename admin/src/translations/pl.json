@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Poprzedni gracz",
   "hide-and-seek.overlay.followNext": "Następny gracz",
   "hide-and-seek.overlay.you": "Ty",
-  "hide-and-seek.toast.external": "Nie w trakcie gry."
+  "hide-and-seek.toast.external": "Nie w trakcie gry.",
+  "hide-and-seek.toast.superseded": "Gra przeniosła się do innej karty. Kliknij tutaj, aby ją odzyskać.",
+  "hide-and-seek.lobby.mode": "Tryb",
+  "hide-and-seek.lobby.modeClassic": "chowany",
+  "hide-and-seek.lobby.modeManhunt": "obława",
+  "hide-and-seek.lobby.prey": "Ścigany",
+  "hide-and-seek.lobby.preyRandom": "losowo",
+  "hide-and-seek.overlay.youArePrey": "Jesteś zwierzyną — uciekaj",
+  "hide-and-seek.overlay.huntTarget": "Ścigaj {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} wytrzymał {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} uciekł po {time}"
 }

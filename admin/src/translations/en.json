@@ -3,6 +3,11 @@
   "hide-and-seek.leaderboard.title": "Hide & Seek leaderboard",
   "hide-and-seek.lobby.connecting": "Connecting",
   "hide-and-seek.lobby.waiting": "Waiting for the game server…",
+  "hide-and-seek.lobby.mode": "Mode",
+  "hide-and-seek.lobby.modeClassic": "hide & seek",
+  "hide-and-seek.lobby.modeManhunt": "manhunt",
+  "hide-and-seek.lobby.prey": "Hunted",
+  "hide-and-seek.lobby.preyRandom": "random",
   "hide-and-seek.lobby.caughtMode": "Caught mode",
   "hide-and-seek.lobby.hide": "Hide",
   "hide-and-seek.lobby.limit": "Limit",
@@ -43,6 +48,10 @@
   "hide-and-seek.overlay.lockedIn": "Locked in",
   "hide-and-seek.overlay.you": "You",
   "hide-and-seek.overlay.youAreHider": "You are a hider",
+  "hide-and-seek.overlay.youArePrey": "You are the prey — run",
+  "hide-and-seek.overlay.huntTarget": "Hunt {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} lasted {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} got away after {time}",
   "hide-and-seek.overlay.youAreSpectator": "You are a spectator",
   "hide-and-seek.overlay.safeZone": "Safe zone",
   "hide-and-seek.overlay.hintHere": "Someone is through here",
@@ -72,5 +81,6 @@
   "hide-and-seek.toast.someoneFound": "{seeker} found {hider}",
   "hide-and-seek.toast.left": "{name} left the game",
   "hide-and-seek.toast.locked": "Locked in — you cannot leave yet!",
-  "hide-and-seek.toast.external": "Not while the game is on."
+  "hide-and-seek.toast.external": "Not while the game is on.",
+  "hide-and-seek.toast.superseded": "The game moved to your other tab. Click here to bring it back."
 }

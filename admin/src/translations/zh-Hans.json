@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "上一位玩家",
   "hide-and-seek.overlay.followNext": "下一位玩家",
   "hide-and-seek.overlay.you": "你",
-  "hide-and-seek.toast.external": "游戏进行中，暂时不行。"
+  "hide-and-seek.toast.external": "游戏进行中，暂时不行。",
+  "hide-and-seek.toast.superseded": "游戏已切换到你的另一个标签页。点击这里把它拿回来。",
+  "hide-and-seek.lobby.mode": "模式",
+  "hide-and-seek.lobby.modeClassic": "捉迷藏",
+  "hide-and-seek.lobby.modeManhunt": "全员追捕",
+  "hide-and-seek.lobby.prey": "目标",
+  "hide-and-seek.lobby.preyRandom": "随机",
+  "hide-and-seek.overlay.youArePrey": "你是目标 —— 快跑",
+  "hide-and-seek.overlay.huntTarget": "追捕 {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} 坚持了 {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} 在 {time} 后逃脱"
 }

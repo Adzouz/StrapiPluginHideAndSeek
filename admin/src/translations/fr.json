@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Joueur précédent",
   "hide-and-seek.overlay.followNext": "Joueur suivant",
   "hide-and-seek.overlay.you": "Vous",
-  "hide-and-seek.toast.external": "Pas pendant la partie."
+  "hide-and-seek.toast.external": "Pas pendant la partie.",
+  "hide-and-seek.toast.superseded": "La partie est passée sur votre autre onglet. Cliquez ici pour la récupérer.",
+  "hide-and-seek.lobby.mode": "Mode",
+  "hide-and-seek.lobby.modeClassic": "cache-cache",
+  "hide-and-seek.lobby.modeManhunt": "chasse à l’homme",
+  "hide-and-seek.lobby.prey": "Traqué",
+  "hide-and-seek.lobby.preyRandom": "au hasard",
+  "hide-and-seek.overlay.youArePrey": "Vous êtes la proie — courez",
+  "hide-and-seek.overlay.huntTarget": "Traquez {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} a tenu {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} s’en est sorti après {time}"
 }

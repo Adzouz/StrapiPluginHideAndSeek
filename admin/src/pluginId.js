@@ -8,6 +8,11 @@ export const STATUS = {
   OVER: 'over',
 };
 
+export const MODE = {
+  CLASSIC: 'classic',
+  MANHUNT: 'manhunt',
+};
+
 export const ROLE = {
   SEEKER: 'seeker',
   HIDER: 'hider',

@@ -12,7 +12,13 @@ const run = async () => {
     await wait(() => cs[0].state.status === 'lobby', 'reset');
   }
 
-  cs[0].socket.emit('settings', { hideSeconds: 1, caughtBecome: 'spectator', seekerCount: 1 });
+  cs[0].socket.emit('settings', {
+    mode: 'classic',
+    preyId: null,
+    hideSeconds: 1,
+    caughtBecome: 'spectator',
+    seekerCount: 1,
+  });
   cs.forEach((c) => c.socket.emit('ready', { ready: true }));
   await wait(() => cs[0].state.players.filter((p) => p.ready).length === 3, 'all ready');
   await new Promise((r) => cs[0].socket.emit('start', {}, r));
@@ -36,6 +42,10 @@ const run = async () => {
   await wait(() => h1.you?.caught === true, 'h1 caught', 12000);
   clearInterval(chase);
   check(h1.you.role === 'spectator', 'caught hider is now a spectator');
+  check(
+    h2.events.some((e) => e.type === 'catch' && e.hiderId === h1.id),
+    'the uninvolved player is told about the catch too'
+  );
   check(seeker.state.status === 'hunting', 'round continues with one hider left');
 
   console.log('\n[4] spectator gets a follow roster');

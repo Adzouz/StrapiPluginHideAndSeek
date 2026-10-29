@@ -51,6 +51,25 @@ const setup = ({ strapi }) => {
     const player = game.join(socket.data.user, socket.id);
 
     socket.data.playerId = player.id;
+
+    // One tab per player. With two open, both report a page and the server only
+    // keeps the last one — so you stand wherever your *other* tab happens to be,
+    // which is how people ended up hiding on pages they had already navigated
+    // away from (or deleted). The newest tab takes over; the old one is told why.
+    [...player.sockets]
+      .filter((id) => id !== socket.id)
+      .forEach((id) => {
+        const previous = io.sockets.sockets.get(id);
+
+        if (!previous) {
+          return;
+        }
+
+        previous.emit('superseded');
+        // Closing in the same tick tears the transport down before the packet is
+        // written, so the old tab would just go quiet with no explanation.
+        setTimeout(() => previous.disconnect(true), 250);
+      });
     socket.emit('hello', { playerId: player.id, state: game.publicState() });
     sendLeaderboard(socket);
 
