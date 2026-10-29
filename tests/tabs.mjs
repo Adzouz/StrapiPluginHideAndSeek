@@ -70,9 +70,27 @@ const run = async () => {
   await sleep(900);
   check(seeker.peers.length === 1, 'the same folder puts them back together');
 
+  // Both are in the same room now, so both are locked in. Aborting used to
+  // leave those locks standing, and they carried into the next round.
+  await sleep(600);
+  check(hider.you.lockedUntil > Date.now(), 'the shared room locked them in');
+
   clearInterval(ping);
   seeker.socket.emit('reset');
   await wait(() => seeker.state.status === 'lobby', 'lobby');
+
+  console.log('\naborting a round does not carry its locks into the next one');
+  [seeker, hider].forEach((c) => c.socket.emit('ready', { ready: true }));
+  await wait(() => seeker.state.players.filter((p) => p.ready).length === 2, 'ready again');
+  await new Promise((r) => seeker.socket.emit('start', {}, r));
+  await wait(() => seeker.state.status === 'hunting', 'hunting again', 15000);
+  await sleep(400);
+  check(
+    [seeker, hider].every((c) => !c.you || c.you.lockedUntil < Date.now()),
+    'the new round starts with nobody locked'
+  );
+  seeker.socket.emit('reset');
+  await wait(() => seeker.state.status === 'lobby', 'back to lobby');
   [secondTab, b].forEach((c) => c.socket.close());
   console.log('\nTAB AND ROOM CHECKS PASS');
   process.exit(0);

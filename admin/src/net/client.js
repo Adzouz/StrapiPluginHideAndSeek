@@ -209,7 +209,7 @@ const keepSessionAlive = () => {
   lastKeepAliveAt = Date.now();
 
   getFetchClient()
-    .get(`/${PLUGIN_ID}/ticket`)
+    .get(`/${PLUGIN_ID}/ping`)
     .catch(() => {
       /* the reconnect path already handles a dead session */
     });
@@ -350,11 +350,20 @@ const followTarget = (roster) => {
 
   const target = roster.find((entry) => entry.id === followId);
 
-  if (!target || !target.page) {
+  // A page is self-reported by another client, so it is only ever followed when
+  // it is a path on this origin — `//evil.example` is a protocol-relative URL.
+  const local =
+    typeof target?.page === 'string' &&
+    target.page.startsWith('/') &&
+    !target.page.startsWith('//');
+
+  if (!local) {
     return;
   }
 
-  if (target.page === window.location.pathname) {
+  // Compare against the same thing the server was told, query string included,
+  // or a page whose id carries one never matches and we reload for ever.
+  if (target.page === pageId()) {
     followNavigatedAt = 0;
     return;
   }
@@ -575,11 +584,21 @@ const wire = (instance) => {
 
   instance.on('state', (state) => {
     clockSkew = state.serverTime - Date.now();
+    const phaseChanged = state.status !== lastStatus;
+
     setState({ game: state });
 
     syncDismissed(state);
 
     goHomeOnReset(state.status);
+
+    // `start()` clears everyone's page server-side. Without re-announcing it, a
+    // player who never navigates stays at no page at all: invisible, uncatchable
+    // and credited with surviving.
+    if (phaseChanged) {
+      lastReportedPath = null;
+      reportPage();
+    }
   });
 
   instance.on('peers', handlePeers);
@@ -616,6 +635,14 @@ const wire = (instance) => {
 
 export async function connect() {
   if (socket || connecting) {
+    return;
+  }
+
+  // A background tab must not take the game off the tab being played in. It
+  // connects when it is actually looked at — see the focus handlers below.
+  if (document.hidden) {
+    scheduleRetry();
+
     return;
   }
 
@@ -697,6 +724,18 @@ export function startClient() {
   });
 
   window.addEventListener('focus', () => connectNow());
+
+  // Focus alone cannot rescue a tab that was superseded while already focused
+  // (a link opened in a background tab does that), so any interaction here
+  // claims the game back — which is what the toast promises.
+  const reclaim = () => {
+    if (superseded) {
+      connectNow();
+    }
+  };
+
+  document.addEventListener('click', reclaim, true);
+  document.addEventListener('keydown', reclaim, true);
 
   connect();
 }

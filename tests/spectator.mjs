@@ -42,6 +42,10 @@ const run = async () => {
   await wait(() => h1.you?.caught === true, 'h1 caught', 12000);
   clearInterval(chase);
   check(h1.you.role === 'spectator', 'caught hider is now a spectator');
+  check(
+    h2.events.some((e) => e.type === 'catch' && e.hiderId === h1.id),
+    'the uninvolved player is told about the catch too'
+  );
   check(seeker.state.status === 'hunting', 'round continues with one hider left');
 
   console.log('\n[4] spectator gets a follow roster');

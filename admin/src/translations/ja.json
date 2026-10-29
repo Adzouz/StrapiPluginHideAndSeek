@@ -81,6 +81,6 @@
   "hide-and-seek.lobby.preyRandom": "ランダム",
   "hide-and-seek.overlay.youArePrey": "あなたが標的です — 逃げて",
   "hide-and-seek.overlay.huntTarget": "{name} を追え",
-  "hide-and-seek.overlay.preyCaught": "{name} は {time} 逃げ切りました",
+  "hide-and-seek.overlay.preyCaught": "{name} は {time} 持ちこたえました",
   "hide-and-seek.overlay.preyEscaped": "{name} は {time} 後に逃げ切りました"
 }

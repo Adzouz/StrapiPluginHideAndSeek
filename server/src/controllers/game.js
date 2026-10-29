@@ -4,6 +4,19 @@ const { PLUGIN_ID, SOCKET_PATH } = require('../constants');
 
 module.exports = ({ strapi }) => ({
   /**
+   * Does nothing, on purpose. The client polls it during a round so the admin's
+   * fetch client keeps the session from going idle — pinging `ticket` for that
+   * would mint a socket credential every minute as a side effect.
+   */
+  ping(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized();
+    }
+
+    ctx.status = 204;
+  },
+
+  /**
    * Hands the logged-in admin a one-shot ticket for the socket handshake.
    * Authentication is whatever the admin API already enforces on this route.
    */

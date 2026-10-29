@@ -136,26 +136,49 @@ const run = async () => {
   check(spareOff.status !== 409, `deactivating a non-player is fine (${spareOff.status})`);
 
   console.log('\nentries somebody is hiding in');
-  const HIDING_SPOT = '/admin/content-manager/collection-types/api::article.article/hns-doc-1';
+  const MODEL = 'api::article.article';
+  const OCCUPIED = 'hns-doc-1';
+  const OTHER = 'hns-doc-2';
+  const entryUrl = (id) => `/content-manager/collection-types/${MODEL}/${id}`;
+  const HIDING_SPOT = `/admin${entryUrl(OCCUPIED)}`;
+
   guest2.socket.emit('page', { path: HIDING_SPOT });
   await sleep(600);
-  const occupied = await api('/content-manager/collection-types/api::article.article/hns-doc-1', {
-    method: 'DELETE',
-    token: admin,
-  });
+
+  const occupied = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
   check(occupied.status === 409, `deleting an occupied entry refused with ${occupied.status}`);
   check(
     occupied.body?.error?.details?.action === 'delete-entry',
     `refusal names the action: ${occupied.body?.error?.details?.action}`
   );
-  console.log(`   message: "${occupied.body?.error?.message}"`);
+
+  // The path real users take: tick the boxes in the list view and hit delete.
+  // It is also the only branch that depends on a guessed request body shape,
+  // and it fails open if that guess is ever wrong.
+  const bulk = await api(`/content-manager/collection-types/${MODEL}/actions/bulkDelete`, {
+    method: 'POST',
+    token: admin,
+    body: { documentIds: [OTHER, OCCUPIED] },
+  });
+  check(bulk.status === 409, `bulk delete including an occupied entry refused with ${bulk.status}`);
+
+  // Precision: the guard must key on the entry, not merely the model.
+  const neighbour = await api(entryUrl(OTHER), { method: 'DELETE', token: admin });
+  check(
+    neighbour.status !== 409,
+    `another entry of the same model is untouched (${neighbour.status})`
+  );
+
+  // The page is self-reported, so a crafted string must not become a veto over
+  // the whole CMS.
+  guest2.socket.emit('page', { path: `/admin/plugins/x?${MODEL} ${OCCUPIED} ${OTHER}` });
+  await sleep(700);
+  const crafted = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
+  check(crafted.status !== 409, `a crafted page string cannot veto deletions (${crafted.status})`);
 
   guest2.socket.emit('page', { path: '/admin/plugins/elsewhere' });
   await sleep(600);
-  const vacated = await api('/content-manager/collection-types/api::article.article/hns-doc-1', {
-    method: 'DELETE',
-    token: admin,
-  });
+  const vacated = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
   check(
     vacated.status !== 409,
     `once they move on, the entry is deletable again (${vacated.status})`

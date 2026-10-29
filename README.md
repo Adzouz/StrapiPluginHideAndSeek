@@ -131,8 +131,10 @@ Two rules change, because the classic ones make a manhunt unplayable:
 
 - **The prey is never locked in.** Frozen in a room with a dozen hunters is an
   instant catch, so they can always run. The hunters are still locked by the
-  encounter, which is what stops the swarm from simply taking turns. Set
-  `preyEscapesLockdown: false` if you want it brutal.
+  encounter, which is what stops the swarm from simply taking turns — but their
+  lock lifts the moment the prey leaves, or the prey could pin every hunter on
+  an empty page and stroll around unopposed. Set `preyEscapesLockdown: false`
+  if you want it brutal.
 - **There is no safe zone.** Otherwise the prey stands on the homepage and runs
   out the clock.
 
@@ -326,6 +328,10 @@ auth: {
 
 Logging out on purpose is still allowed, and now simply takes you out of the
 round — see the leaving rules above.
+
+Note for operators: while a round runs the plugin deliberately keeps the admin
+session from going idle. If your security posture depends on short idle
+sessions, turn the game off outside the times you want it played.
 
 ## Known limitations
 

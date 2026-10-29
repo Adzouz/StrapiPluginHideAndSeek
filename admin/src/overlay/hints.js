@@ -45,7 +45,9 @@ export const applyHint = (path, safePath) => {
     return 0;
   }
 
-  const target = normalise(path);
+  // A hint names a room, which may carry a query string; links are matched on
+  // their path alone, so compare paths or a Media Library hint never matches.
+  const target = normalise(String(path).split('?')[0]);
   const anchors = [...document.querySelectorAll('a[href]')].filter((anchor) =>
     pointsAt(anchor, target, safePath)
   );

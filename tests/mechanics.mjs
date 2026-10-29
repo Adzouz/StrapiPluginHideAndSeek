@@ -80,6 +80,11 @@ const run = async () => {
   check(seeker.state.status === 'hunting', 'no catch in the safe zone despite overlapping cursors');
   check(hider.you.slowed === false, 'no slowdown in the safe zone');
 
+  // Page ids now carry query keys; the safe zone is matched on the path alone.
+  hider.socket.emit('page', { path: `${HOME}?folder=1` });
+  await sleep(700);
+  check(hider.you.safe === true, 'still the safe zone with a query string attached');
+
   console.log('\n[3] catch carries survival time and the new role');
   hider.socket.emit('page', { path: SPOT });
   seeker.socket.emit('page', { path: SPOT });
