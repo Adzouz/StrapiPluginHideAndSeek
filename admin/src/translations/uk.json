@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Попередній гравець",
   "hide-and-seek.overlay.followNext": "Наступний гравець",
   "hide-and-seek.overlay.you": "Ви",
-  "hide-and-seek.toast.external": "Не під час гри."
+  "hide-and-seek.toast.external": "Не під час гри.",
+  "hide-and-seek.toast.superseded": "Гра перейшла на іншу вкладку. Натисніть тут, щоб повернути її.",
+  "hide-and-seek.lobby.mode": "Режим",
+  "hide-and-seek.lobby.modeClassic": "хованки",
+  "hide-and-seek.lobby.modeManhunt": "облава",
+  "hide-and-seek.lobby.prey": "Жертва",
+  "hide-and-seek.lobby.preyRandom": "випадково",
+  "hide-and-seek.overlay.youArePrey": "Ви жертва — тікайте",
+  "hide-and-seek.overlay.huntTarget": "Ловіть {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} протримався {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} утік через {time}"
 }

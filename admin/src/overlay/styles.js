@@ -283,6 +283,11 @@ body.hns-in-game section[data-strapi-widget-id^="plugin::hide-and-seek."] > head
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .hns-toast--good { border-color: #5cb176; }
+.hns-toast--catch {
+  border-color: #ffd046;
+  color: #ffd046;
+  font-size: 15px;
+}
 .hns-toast--bad { border-color: #ee5e52; }
 `;
 

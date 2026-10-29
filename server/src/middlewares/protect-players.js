@@ -5,6 +5,41 @@ const { PLUGIN_ID } = require('../constants');
 const ONE_USER = /^\/admin\/users\/([^/]+)\/?$/;
 const BATCH_DELETE = /^\/admin\/users\/batch-delete\/?$/;
 
+const ONE_ENTRY = /^\/content-manager\/collection-types\/([^/]+)\/([^/]+)\/?$/;
+const BULK_ENTRIES = /^\/content-manager\/collection-types\/([^/]+)\/actions\/bulkDelete\/?$/;
+const SINGLE_TYPE = /^\/content-manager\/single-types\/([^/]+)\/?$/;
+
+/**
+ * The content entry this request would delete, when somebody might be standing
+ * on its page.
+ */
+const entryTargetsFor = (ctx) => {
+  if (ctx.method === 'DELETE') {
+    const entry = ONE_ENTRY.exec(ctx.path);
+
+    if (entry) {
+      return { model: entry[1], documentIds: [entry[2]] };
+    }
+
+    const single = SINGLE_TYPE.exec(ctx.path);
+
+    if (single) {
+      return { model: single[1], documentIds: [] };
+    }
+  }
+
+  if (ctx.method === 'POST') {
+    const bulk = BULK_ENTRIES.exec(ctx.path);
+    const ids = ctx.request.body?.documentIds ?? ctx.request.body?.ids;
+
+    if (bulk && Array.isArray(ids)) {
+      return { model: bulk[1], documentIds: ids };
+    }
+  }
+
+  return null;
+};
+
 /**
  * What this request would do to which admin users, when it is something that
  * would take a player out of a round.
@@ -45,6 +80,28 @@ const targetsFor = (ctx) => {
  */
 const protectPlayers = ({ strapi }) => {
   strapi.server.use(async (ctx, next) => {
+    const entry = entryTargetsFor(ctx);
+
+    if (entry) {
+      const occupants = strapi.plugin(PLUGIN_ID).service('game').occupantsOf(entry);
+
+      if (occupants.length > 0) {
+        ctx.status = 409;
+        ctx.body = {
+          data: null,
+          error: {
+            status: 409,
+            name: 'HideAndSeekRoundInProgress',
+            message:
+              'Somebody is hiding in this entry. Deleting it would leave them on a page nobody else can reach — end the round first.',
+            details: { players: occupants, action: 'delete-entry' },
+          },
+        };
+
+        return;
+      }
+    }
+
     const target = targetsFor(ctx);
 
     if (!target || target.ids.length === 0) {
@@ -76,4 +133,4 @@ const protectPlayers = ({ strapi }) => {
   });
 };
 
-module.exports = { protectPlayers, targetsFor };
+module.exports = { protectPlayers, targetsFor, entryTargetsFor };

@@ -31,7 +31,12 @@ const run = async () => {
   check(a.state.players.length === 3, 'and they can come back');
 
   console.log('\nleaving mid-round is cleaned up once the round ends');
-  a.socket.emit('settings', { hideSeconds: 1, caughtBecome: 'spectator' });
+  a.socket.emit('settings', {
+    mode: 'classic',
+    preyId: null,
+    hideSeconds: 1,
+    caughtBecome: 'spectator',
+  });
   [a, b, c3].forEach((x) => x.socket.emit('ready', { ready: true }));
   await wait(() => a.state.players.filter((p) => p.ready).length === 3, 'ready');
   await new Promise((r) => a.socket.emit('start', {}, r));

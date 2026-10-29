@@ -103,6 +103,42 @@ straight back to being the lobby, ready to deal a new round while the last
 result is still on screen. Closing the results card takes you back to the
 homepage, and only you: it does not end anybody else's round.
 
+### Where you are
+
+A hiding spot is the admin route you are on — but some screens keep their
+location in the query string rather than the path. The Media Library is the
+obvious one: every folder is the same pathname with a different `folder`
+parameter, so without help everybody in the Media Library would share one room
+regardless of the folder they opened. `pageQueryKeys` lists the parameters that
+count. Filters, sort and pagination are left out on purpose: two people looking
+at the same list through different filters are still in the same place, and
+treating those as separate rooms would make anyone unfindable.
+
+**One tab per player.** Opening the admin in a second tab hands the game to the
+newest tab and disconnects the older one, which is told why. With two tabs live
+they would both report a page, the server would keep whichever spoke last, and
+you would end up standing wherever your other tab happened to be — including on
+pages you had already left or deleted.
+
+### Manhunt
+
+Set **Mode** to _manhunt_ in the lobby and pick who everybody is after. That
+player is the only hider; every other player is a seeker. The round ends the
+moment they are caught — or they win by lasting the whole clock, and the result
+card leads with how long they survived.
+
+Two rules change, because the classic ones make a manhunt unplayable:
+
+- **The prey is never locked in.** Frozen in a room with a dozen hunters is an
+  instant catch, so they can always run. The hunters are still locked by the
+  encounter, which is what stops the swarm from simply taking turns. Set
+  `preyEscapesLockdown: false` if you want it brutal.
+- **There is no safe zone.** Otherwise the prey stands on the homepage and runs
+  out the clock.
+
+They are still slowed while a hunter shares their page, so they can flee a room
+but not dance around it.
+
 ### The safe zone
 
 The admin **homepage is neutral ground**: no lockdown, no slowdown, no catching.
@@ -209,25 +245,29 @@ export default {
 };
 ```
 
-| Option             | Default    | What it does                                                                                                           |
-| ------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `countdownSeconds` | `3`        | "3… 2… 1…" before roles are revealed.                                                                                  |
-| `hideSeconds`      | `10`       | Time to scatter while the seeker is blindfolded.                                                                       |
-| `roundSeconds`     | `600`      | Hard time limit. Hiders still free at 0:00 win.                                                                        |
-| `graceMs`          | `0`        | How long a hider stays invisible after a seeker arrives. Off by default: the lockdown already gives them their chance. |
-| `hiderSpeedLimit`  | `0.55`     | Top speed of a cornered hider's marker, in viewport widths per second. `0` disables the slowdown.                      |
-| `safeZone`         | `true`     | Whether the admin homepage is neutral ground.                                                                          |
-| `hintAfterMs`      | `45000`    | How long a seeker goes without a sighting before being nudged.                                                         |
-| `hintRepeatMs`     | `20000`    | How often the nudge picks a fresh target.                                                                              |
-| `lockdownMs`       | `4000`     | How long a shared page locks both players in place.                                                                    |
-| `catchRadius`      | `0.06`     | Catch distance, as a fraction of the viewport.                                                                         |
-| `catchHoldMs`      | `800`      | How long the seeker must hold the cursor to catch.                                                                     |
-| `idleRevealMs`     | `2000`     | A motionless hider is revealed after this.                                                                             |
-| `caughtBecome`     | `'seeker'` | `'seeker'` for tag-team, or `'spectator'`.                                                                             |
-| `seekerCount`      | `1`        | Seekers drawn at the start of a round.                                                                                 |
-| `forfeitAfterMs`   | `20000`    | A disconnected hider forfeits after this.                                                                              |
-| `tickHz`           | `20`       | Server tick and position broadcast rate.                                                                               |
-| `corsOrigin`       | `true`     | socket.io CORS origin. `true` reflects the request origin.                                                             |
+| Option                | Default                    | What it does                                                                                                           |
+| --------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `countdownSeconds`    | `3`                        | "3… 2… 1…" before roles are revealed.                                                                                  |
+| `hideSeconds`         | `10`                       | Time to scatter while the seeker is blindfolded.                                                                       |
+| `roundSeconds`        | `600`                      | Hard time limit. Hiders still free at 0:00 win.                                                                        |
+| `graceMs`             | `0`                        | How long a hider stays invisible after a seeker arrives. Off by default: the lockdown already gives them their chance. |
+| `hiderSpeedLimit`     | `0.3`                      | Top speed of a cornered hider's marker, in viewport widths per second. `0` disables the slowdown.                      |
+| `safeZone`            | `true`                     | Whether the admin homepage is neutral ground.                                                                          |
+| `pageQueryKeys`       | `['folder', 'folderPath']` | Query parameters that count as part of _where you are_. Filters and sort deliberately do not.                          |
+| `hintAfterMs`         | `45000`                    | How long a seeker goes without a sighting before being nudged.                                                         |
+| `hintRepeatMs`        | `20000`                    | How often the nudge picks a fresh target.                                                                              |
+| `lockdownMs`          | `15000`                    | How long a shared page locks both players in place.                                                                    |
+| `catchRadius`         | `0.09`                     | Catch distance, as a fraction of the viewport.                                                                         |
+| `catchHoldMs`         | `800`                      | How long the seeker must hold the cursor to catch.                                                                     |
+| `idleRevealMs`        | `2000`                     | A motionless hider is revealed after this.                                                                             |
+| `caughtBecome`        | `'seeker'`                 | `'seeker'` for tag-team, or `'spectator'`.                                                                             |
+| `seekerCount`         | `1`                        | Seekers drawn at the start of a round.                                                                                 |
+| `mode`                | `'classic'`                | `'classic'` deals seekers against the rest; `'manhunt'` puts one named player against the whole room.                  |
+| `preyId`              | `null`                     | Manhunt only: who is hunted. Falls back to a random player.                                                            |
+| `preyEscapesLockdown` | `true`                     | Manhunt only: whether the prey is exempt from the lockdown.                                                            |
+| `forfeitAfterMs`      | `20000`                    | A disconnected hider forfeits after this.                                                                              |
+| `tickHz`              | `20`                       | Server tick and position broadcast rate.                                                                               |
+| `corsOrigin`          | `true`                     | socket.io CORS origin. `true` reflects the request origin.                                                             |
 
 `caughtBecome`, `hideSeconds`, `roundSeconds` and `seekerCount` can also be
 changed from the lobby widget between rounds, without a restart.
@@ -236,9 +276,11 @@ changed from the lobby widget between rounds, without a restart.
 
 Two numbers decide whether a standoff is winnable. `lockdownMs` is how long the
 hider is stuck in the room, and `hiderSpeedLimit` is how far they can travel
-while they are. At the defaults a cornered hider can cross about two screens in the 4 seconds
-they are frozen — enough to dodge a slow seeker, not enough to walk away. Raise
-the speed limit for slippery hiders, lower it for a bloodbath.
+while they are. At the defaults a cornered hider is frozen for 15 seconds and can only drift at
+0.3 screens per second, against a catch radius of 0.09 — a standoff the seeker
+should usually win. Earlier defaults (4s, 0.55, 0.06) made hiders very hard to
+catch. Raise `hiderSpeedLimit` and lower `lockdownMs` for slippery hiders; the
+three numbers are the whole difficulty dial.
 
 ## How it works
 
@@ -262,6 +304,28 @@ the speed limit for slippery hiders, lower it for a bloodbath.
   navigation. Cursor positions are written straight to the DOM from an animation
   frame rather than through React state; 20Hz of coordinates should not re-render
   the panel.
+
+## Long rounds and admin sessions
+
+Strapi ends an idle admin session, and a hider who has found a good spot stops
+clicking entirely — a socket carries no HTTP activity, so they used to be logged
+out mid-round. While a round is running the plugin polls an authenticated
+endpoint once a minute, which keeps the admin's token refreshed on its own
+schedule.
+
+For long sessions you can also widen the window in `config/admin.ts`:
+
+```ts
+auth: {
+  sessions: {
+    idleSessionLifespan: 60 * 60 * 1000, // and idleRefreshTokenLifespan,
+    maxSessionLifespan: 8 * 60 * 60 * 1000, // maxRefreshTokenLifespan
+  },
+},
+```
+
+Logging out on purpose is still allowed, and now simply takes you out of the
+round — see the leaving rules above.
 
 ## Known limitations
 
@@ -358,6 +422,13 @@ non-players, and once the round is over. Every account it deletes is one it
 created for the purpose, so it leaves your test users alone; still, point it at a
 scratch project rather than anything you care about.
 
+`tests/manhunt.mjs` covers the whole-room mode: role dealing, the two exemptions
+that keep it playable, and the survival time on the result.
+
+`tests/tabs.mjs` covers the two ways a player's position could drift from where
+they actually are: a second tab taking over, and screens that keep their location
+in the query string.
+
 `tests/spectator.mjs` needs three players and covers what happens after a catch:
 the follow roster, the one-way visibility between spectators and players, and the
 hint a stuck seeker eventually gets. That last check waits out `hintAfterMs`; set
@@ -373,6 +444,8 @@ HNS_URL=http://127.0.0.1:1337 npm run test:mechanics
 HNS_URL=http://127.0.0.1:1337 npm run test:spectator
 HNS_URL=http://127.0.0.1:1337 npm run test:disconnect
 HNS_URL=http://127.0.0.1:1337 npm run test:deletion
+HNS_URL=http://127.0.0.1:1337 npm run test:tabs
+HNS_URL=http://127.0.0.1:1337 npm run test:manhunt
 ```
 
 The suites can be run back to back: `tests/helpers.mjs` caches admin tokens in

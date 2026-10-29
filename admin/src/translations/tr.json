@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Önceki oyuncu",
   "hide-and-seek.overlay.followNext": "Sonraki oyuncu",
   "hide-and-seek.overlay.you": "Sen",
-  "hide-and-seek.toast.external": "Oyun sürerken olmaz."
+  "hide-and-seek.toast.external": "Oyun sürerken olmaz.",
+  "hide-and-seek.toast.superseded": "Oyun diğer sekmene taşındı. Geri almak için buraya tıkla.",
+  "hide-and-seek.lobby.mode": "Mod",
+  "hide-and-seek.lobby.modeClassic": "saklambaç",
+  "hide-and-seek.lobby.modeManhunt": "insan avı",
+  "hide-and-seek.lobby.prey": "Avlanan",
+  "hide-and-seek.lobby.preyRandom": "rastgele",
+  "hide-and-seek.overlay.youArePrey": "Av sensin — kaç",
+  "hide-and-seek.overlay.huntTarget": "{name} oyuncusunu avla",
+  "hide-and-seek.overlay.preyCaught": "{name} {time} dayandı",
+  "hide-and-seek.overlay.preyEscaped": "{name} {time} sonra kaçtı"
 }

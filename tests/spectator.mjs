@@ -12,7 +12,13 @@ const run = async () => {
     await wait(() => cs[0].state.status === 'lobby', 'reset');
   }
 
-  cs[0].socket.emit('settings', { hideSeconds: 1, caughtBecome: 'spectator', seekerCount: 1 });
+  cs[0].socket.emit('settings', {
+    mode: 'classic',
+    preyId: null,
+    hideSeconds: 1,
+    caughtBecome: 'spectator',
+    seekerCount: 1,
+  });
   cs.forEach((c) => c.socket.emit('ready', { ready: true }));
   await wait(() => cs[0].state.players.filter((p) => p.ready).length === 3, 'all ready');
   await new Promise((r) => cs[0].socket.emit('start', {}, r));

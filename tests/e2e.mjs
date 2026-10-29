@@ -14,7 +14,12 @@ const run = async () => {
     await waitFor(() => a.state.status === 'lobby', 'reset before test');
   }
 
-  a.socket.emit('settings', { hideSeconds: 1, caughtBecome: 'spectator' });
+  a.socket.emit('settings', {
+    mode: 'classic',
+    preyId: null,
+    hideSeconds: 1,
+    caughtBecome: 'spectator',
+  });
   a.socket.emit('ready', { ready: true });
   b.socket.emit('ready', { ready: true });
 

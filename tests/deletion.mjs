@@ -99,7 +99,7 @@ const run = async () => {
   const guest2 = await connectWithToken(player.token, player.email);
   players[2] = guest2;
 
-  seeker.socket.emit('settings', { hideSeconds: 1, seekerCount: 1 });
+  seeker.socket.emit('settings', { mode: 'classic', preyId: null, hideSeconds: 1, seekerCount: 1 });
   players.forEach((c) => c.socket.emit('ready', { ready: true }));
   await wait(() => seeker.state.players.filter((p) => p.ready).length === 3, 'ready');
   await new Promise((r) => seeker.socket.emit('start', {}, r));
@@ -134,6 +134,32 @@ const run = async () => {
 
   const spareOff = await setActive(admin, bystander.id, false);
   check(spareOff.status !== 409, `deactivating a non-player is fine (${spareOff.status})`);
+
+  console.log('\nentries somebody is hiding in');
+  const HIDING_SPOT = '/admin/content-manager/collection-types/api::article.article/hns-doc-1';
+  guest2.socket.emit('page', { path: HIDING_SPOT });
+  await sleep(600);
+  const occupied = await api('/content-manager/collection-types/api::article.article/hns-doc-1', {
+    method: 'DELETE',
+    token: admin,
+  });
+  check(occupied.status === 409, `deleting an occupied entry refused with ${occupied.status}`);
+  check(
+    occupied.body?.error?.details?.action === 'delete-entry',
+    `refusal names the action: ${occupied.body?.error?.details?.action}`
+  );
+  console.log(`   message: "${occupied.body?.error?.message}"`);
+
+  guest2.socket.emit('page', { path: '/admin/plugins/elsewhere' });
+  await sleep(600);
+  const vacated = await api('/content-manager/collection-types/api::article.article/hns-doc-1', {
+    method: 'DELETE',
+    token: admin,
+  });
+  check(
+    vacated.status !== 409,
+    `once they move on, the entry is deletable again (${vacated.status})`
+  );
 
   console.log('\nafter the round');
   seeker.socket.emit('reset');

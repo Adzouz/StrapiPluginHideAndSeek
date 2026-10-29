@@ -52,8 +52,10 @@
     "test:deletion": "node tests/deletion.mjs",
     "test:disconnect": "node tests/disconnect.mjs",
     "test:e2e": "node tests/e2e.mjs",
+    "test:manhunt": "node tests/manhunt.mjs",
     "test:mechanics": "node tests/mechanics.mjs",
     "test:spectator": "node tests/spectator.mjs",
+    "test:tabs": "node tests/tabs.mjs",
     "verify": "strapi-plugin verify",
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link"

@@ -16,7 +16,7 @@ import {
 
 import { msg } from '../i18n';
 import { send } from '../net/client';
-import { ROLE, STATUS } from '../pluginId';
+import { MODE, ROLE, STATUS } from '../pluginId';
 import { useGameStore } from '../store';
 
 const HIDE_DURATIONS = [10, 15, 20, 30, 45];
@@ -59,6 +59,45 @@ const Setting = ({ label, first, value, onChange, children }) => (
 );
 
 /** One row rather than three stacked ones — the player list needs the space. */
+/** Which game, and — in a manhunt — who the room is after. */
+const ModeRow = ({ settings, players }) => {
+  const { formatMessage } = useIntl();
+  const isManhunt = settings.mode === MODE.MANHUNT;
+
+  return (
+    <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
+      <Setting
+        label={formatMessage(msg('lobby.mode'))}
+        first
+        value={settings.mode ?? MODE.CLASSIC}
+        onChange={(value) => send('settings', { mode: value })}
+      >
+        <SingleSelectOption value={MODE.CLASSIC}>
+          {formatMessage(msg('lobby.modeClassic'))}
+        </SingleSelectOption>
+        <SingleSelectOption value={MODE.MANHUNT}>
+          {formatMessage(msg('lobby.modeManhunt'))}
+        </SingleSelectOption>
+      </Setting>
+
+      {isManhunt ? (
+        <Setting
+          label={formatMessage(msg('lobby.prey'))}
+          value={settings.preyId ?? ''}
+          onChange={(value) => send('settings', { preyId: value === '' ? null : value })}
+        >
+          <SingleSelectOption value="">{formatMessage(msg('lobby.preyRandom'))}</SingleSelectOption>
+          {players.map((player) => (
+            <SingleSelectOption key={player.id} value={player.id}>
+              {player.name}
+            </SingleSelectOption>
+          ))}
+        </Setting>
+      ) : null}
+    </Flex>
+  );
+};
+
 const Settings = ({ settings }) => {
   const { formatMessage } = useIntl();
 
@@ -195,6 +234,7 @@ const Lobby = ({ game, me }) => {
     <Shell
       header={
         <>
+          <ModeRow settings={game.settings} players={game.players} />
           <Settings settings={game.settings} />
           <Divider />
         </>

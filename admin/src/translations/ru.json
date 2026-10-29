@@ -72,5 +72,15 @@
   "hide-and-seek.overlay.followPrev": "Предыдущий игрок",
   "hide-and-seek.overlay.followNext": "Следующий игрок",
   "hide-and-seek.overlay.you": "Вы",
-  "hide-and-seek.toast.external": "Не во время игры."
+  "hide-and-seek.toast.external": "Не во время игры.",
+  "hide-and-seek.toast.superseded": "Игра перешла на другую вкладку. Нажмите здесь, чтобы вернуть её.",
+  "hide-and-seek.lobby.mode": "Режим",
+  "hide-and-seek.lobby.modeClassic": "прятки",
+  "hide-and-seek.lobby.modeManhunt": "облава",
+  "hide-and-seek.lobby.prey": "Жертва",
+  "hide-and-seek.lobby.preyRandom": "случайно",
+  "hide-and-seek.overlay.youArePrey": "Вы жертва — бегите",
+  "hide-and-seek.overlay.huntTarget": "Ловите {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} продержался {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} ушёл через {time}"
 }

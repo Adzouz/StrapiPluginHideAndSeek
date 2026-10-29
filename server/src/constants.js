@@ -35,4 +35,10 @@ const PALETTE = [
   '#9736e8',
 ];
 
-module.exports = { PLUGIN_ID, SOCKET_PATH, STATUS, ROLE, PALETTE };
+/** Classic hide and seek, or everyone against one. */
+const MODE = {
+  CLASSIC: 'classic',
+  MANHUNT: 'manhunt',
+};
+
+module.exports = { PLUGIN_ID, SOCKET_PATH, STATUS, ROLE, PALETTE, MODE };
