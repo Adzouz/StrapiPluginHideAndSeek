@@ -193,8 +193,21 @@ const KEEP_ALIVE_MS = 60000;
 let lastKeepAliveAt = 0;
 /** Another tab took the game over; this one stays quiet until it is focused. */
 let superseded = false;
-/** This tab has held the game at some point, so reconnecting is not a steal. */
-let hadSession = false;
+
+/**
+ * How long after losing the socket a hidden tab may reconnect on its own.
+ *
+ * Long enough to ride out a blip — a mid-round disconnection is forfeited after
+ * `forfeitAfterMs` (20s by default) regardless, so nothing is saved by waiting
+ * longer. Short enough that a tab which slept through a handover it was never
+ * told about cannot wake up and take the game off the tab being played in: the
+ * `superseded` packet is only advisory, and a connection that died without
+ * delivering it leaves this tab believing it is still the holder.
+ */
+const RECLAIM_WINDOW_MS = 60000;
+
+/** While in the future, this tab may reconnect without being looked at. */
+let reclaimableUntil = 0;
 
 /**
  * A hider who has found a good spot stops clicking, and Strapi eventually ends
@@ -204,10 +217,13 @@ let hadSession = false;
  * refreshes the token off the back of it.
  */
 const keepSessionAlive = () => {
-  // `connected` as well as the phase: a tab that has been superseded or dropped
-  // still holds the last round it saw, and would otherwise go on refreshing the
-  // session for a game it is no longer in — for as long as it stays open.
-  if (!getState().connected || !inGame() || Date.now() - lastKeepAliveAt < KEEP_ALIVE_MS) {
+  // Superseded, not merely disconnected: a tab that has handed the game over
+  // would otherwise go on refreshing the session for a round it is watching
+  // from the outside, for as long as it stays open. A tab that is between
+  // sockets still wants its session, because it is the session the reconnect
+  // is about to need — and the socket dying says nothing about whether HTTP
+  // still works.
+  if (superseded || !inGame() || Date.now() - lastKeepAliveAt < KEEP_ALIVE_MS) {
     return;
   }
 
@@ -433,14 +449,16 @@ export const stopFollowing = () => {
 const handlePeers = ({ peers, you } = {}) => {
   peersRef.current = Array.isArray(peers) ? peers : [];
   ownMarkerRef.current = you?.slowed ? you.position : null;
-  setLockedUntil(you?.lockedUntil ?? 0);
 
   // The only clock reading that arrives during a quiet hunt: `state` is sent
   // on change, so without this the skew every countdown is measured against
-  // goes stale for as long as nothing happens.
+  // goes stale for as long as nothing happens. Before the lockdown, which is
+  // measured against it.
   if (you?.serverTime) {
     clockSkew = you.serverTime - Date.now();
   }
+
+  setLockedUntil(you?.lockedUntil ?? 0);
 
   const danger =
     myRole() === ROLE.HIDER && peersRef.current.some((peer) => peer.role === ROLE.SEEKER);
@@ -607,13 +625,18 @@ const connectNow = () => {
 const wire = (instance) => {
   instance.on('hello', ({ playerId, state }) => {
     retryDelay = RETRY_MIN_MS;
-    hadSession = true;
     clockSkew = state.serverTime - Date.now();
     lastStatus = state.status;
     setState({ connected: true, playerId, game: state });
     syncDismissed(state);
     lastReportedPath = null;
     reportPage();
+    // `away` is a fire-and-forget emit, so any change made while the socket was
+    // down went nowhere, and the server carries the flag across a reconnect
+    // untouched. Without this a hider who tabbed away *after* the drop comes
+    // back marked present, parked at the cursor they left behind — exactly the
+    // unfindable hider `setAway` exists to prevent.
+    setAway(document.hidden);
   });
 
   instance.on('state', (state) => {
@@ -650,7 +673,7 @@ const wire = (instance) => {
     superseded = true;
     // Whatever this tab held, the other one holds now: it has no session to
     // win back on its own, and must wait to be looked at.
-    hadSession = false;
+    reclaimableUntil = 0;
     pushToast('neutral', t('toast.superseded'), 8000);
     // Step aside immediately rather than waiting to be cut off, so there is no
     // window where two tabs are both reporting where this player is.
@@ -667,6 +690,9 @@ const wire = (instance) => {
     // Reconnecting here would steal the game straight back and leave the two
     // tabs fighting over it. Wait until this one is focused instead.
     if (!superseded) {
+      // It held the game until a moment ago, so it may win it back on its own
+      // even while hidden — for as long as that claim is still fresh.
+      reclaimableUntil = Date.now() + RECLAIM_WINDOW_MS;
       scheduleRetry();
     }
   });
@@ -685,11 +711,12 @@ export async function connect() {
 
   // A background tab must not take the game off the tab being played in, so a
   // tab that has never held it waits to be looked at — see the focus handlers
-  // below. A tab that *was* holding it and simply lost the socket is a
-  // different case entirely: a hider who tabbed away to hide would otherwise
-  // sit out the rest of the round and be forfeited where they stand. Once
-  // superseded, `hadSession` is false again and this gate closes.
-  if (document.hidden && !hadSession) {
+  // below. A tab that was holding it moments ago and simply lost the socket is
+  // a different case entirely: a hider who tabbed away to hide would otherwise
+  // sit out the rest of the round and be forfeited where they stand. That
+  // licence expires, because this tab's belief that it is still the holder is
+  // only as fresh as the last packet it received.
+  if (document.hidden && Date.now() > reclaimableUntil) {
     scheduleRetry();
 
     return;

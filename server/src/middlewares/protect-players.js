@@ -11,6 +11,26 @@ const SINGLE_TYPE = /^\/content-manager\/single-types\/([^/]+)\/?$/;
 
 const UPLOAD_BULK_DELETE = /^\/upload\/actions\/bulk-delete\/?$/;
 
+/** Where the upload plugin keeps its folders, for resolving a delete's subtree. */
+const FOLDER_UID = 'plugin::upload.folder';
+
+/**
+ * A path segment as the router will read it.
+ *
+ * `ctx.path` is raw and undecoded, but Koa's router decodes its captures before
+ * the controller sees them — so `/admin/users/%31` is user `1` to Strapi and
+ * the literal string `%31` to a matcher that does not decode. Comparing the raw
+ * form against ids the game holds in decoded form lets a percent-encoded
+ * request walk straight past every guard here.
+ */
+const decodeSegment = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
 /**
  * Nothing here has been authenticated yet — see `protectPlayers` — so the
  * refusal says only that somebody is in the way, never who or where.
@@ -52,13 +72,13 @@ const entryTargetsFor = (ctx) => {
     const entry = ONE_ENTRY.exec(ctx.path);
 
     if (entry) {
-      return { model: entry[1], documentIds: [entry[2]] };
+      return { model: decodeSegment(entry[1]), documentIds: [decodeSegment(entry[2])] };
     }
 
     const single = SINGLE_TYPE.exec(ctx.path);
 
     if (single) {
-      return { model: single[1], documentIds: [] };
+      return { model: decodeSegment(single[1]), documentIds: [] };
     }
   }
 
@@ -67,7 +87,7 @@ const entryTargetsFor = (ctx) => {
     const ids = ctx.request.body?.documentIds ?? ctx.request.body?.ids;
 
     if (bulk && Array.isArray(ids)) {
-      return { model: bulk[1], documentIds: ids };
+      return { model: decodeSegment(bulk[1]), documentIds: ids };
     }
   }
 
@@ -82,7 +102,7 @@ const targetsFor = (ctx) => {
   if (ctx.method === 'DELETE') {
     const match = ONE_USER.exec(ctx.path);
 
-    return match ? { verb: 'delete', ids: [match[1]] } : null;
+    return match ? { verb: 'delete', ids: [decodeSegment(match[1])] } : null;
   }
 
   if (ctx.method === 'POST' && BATCH_DELETE.test(ctx.path)) {
@@ -98,11 +118,38 @@ const targetsFor = (ctx) => {
     const { isActive } = ctx.request.body ?? {};
 
     if (match && (isActive === false || isActive === 'false')) {
-      return { verb: 'deactivate', ids: [match[1]] };
+      return { verb: 'deactivate', ids: [decodeSegment(match[1])] };
     }
   }
 
   return null;
+};
+
+/**
+ * The folders a delete names, each with the `path` that defines its subtree.
+ *
+ * The id in a Media Library URL and the ids in `folderPath` come from two
+ * different counters, so the subtree cannot be read off the URL — only the
+ * database knows which folders a delete would really take with it. If the
+ * lookup fails, fall back to the ids alone: the guard then still catches
+ * somebody standing in the folder itself, which is the common case, rather
+ * than failing open entirely.
+ */
+const resolveFolders = async (strapi, folderIds) => {
+  try {
+    const rows = await strapi.db.query(FOLDER_UID).findMany({
+      select: ['id', 'path'],
+      where: { id: { $in: folderIds } },
+    });
+
+    return rows.map((row) => ({ id: row.id, path: row.path }));
+  } catch (error) {
+    strapi.log.warn(
+      `[hide-and-seek] could not resolve folder paths, guarding by id only: ${error?.message ?? error}`
+    );
+
+    return folderIds.map((id) => ({ id, path: null }));
+  }
 };
 
 /**
@@ -156,7 +203,7 @@ const protectPlayers = ({ strapi }) => {
       return;
     }
 
-    if (folderIds && game.occupantsOfFolders(folderIds).length > 0) {
+    if (folderIds && game.occupantsOfFolders(await resolveFolders(strapi, folderIds)).length > 0) {
       refuse(
         ctx,
         'Somebody is hiding in this folder. Deleting it would leave them on a page nobody else can reach — end the round first.',

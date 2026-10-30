@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Ronde voorbij",
   "hide-and-seek.error.notEnoughPlayers": "Minstens 2 klare spelers nodig",
   "hide-and-seek.error.roundRunning": "Er loopt al een ronde",
+  "hide-and-seek.error.preyNotReady": "De opgejaagde speler is niet klaar",
   "hide-and-seek.leaderboard.empty": "Nog geen ronde gespeeld. Win er een en het klassement is van jou.",
   "hide-and-seek.leaderboard.players": "{count} spelers in totaal",
   "hide-and-seek.leaderboard.points": "punten",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "Jij bent de prooi — rennen",
   "hide-and-seek.overlay.huntTarget": "Jaag op {name}",
   "hide-and-seek.overlay.preyCaught": "{name} hield het {time} vol",
-  "hide-and-seek.overlay.preyEscaped": "{name} ontsnapte na {time}"
+  "hide-and-seek.overlay.preyEscaped": "{name} ontsnapte na {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} verliet de jacht"
 }

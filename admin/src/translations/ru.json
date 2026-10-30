@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Раунд окончен",
   "hide-and-seek.error.notEnoughPlayers": "Нужно минимум 2 готовых игрока",
   "hide-and-seek.error.roundRunning": "Раунд уже идёт",
+  "hide-and-seek.error.preyNotReady": "Жертва не готова",
   "hide-and-seek.leaderboard.empty": "Ещё не сыграно ни одного раунда. Выиграйте — и таблица ваша.",
   "hide-and-seek.leaderboard.players": "Всего игроков: {count}",
   "hide-and-seek.leaderboard.points": "очки",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "Вы жертва — бегите",
   "hide-and-seek.overlay.huntTarget": "Ловите {name}",
   "hide-and-seek.overlay.preyCaught": "{name} продержался {time}",
-  "hide-and-seek.overlay.preyEscaped": "{name} ушёл через {time}"
+  "hide-and-seek.overlay.preyEscaped": "{name} ушёл через {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} вышел из игры"
 }

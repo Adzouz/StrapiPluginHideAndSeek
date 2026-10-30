@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "ラウンド終了",
   "hide-and-seek.error.notEnoughPlayers": "準備完了のプレイヤーが2人以上必要です",
   "hide-and-seek.error.roundRunning": "すでにラウンドが進行中です",
+  "hide-and-seek.error.preyNotReady": "標的のプレイヤーが準備できていません",
   "hide-and-seek.leaderboard.empty": "まだプレイ記録がありません。1勝すればこのボードはあなたのものです。",
   "hide-and-seek.leaderboard.players": "累計 {count} 人",
   "hide-and-seek.leaderboard.points": "ポイント",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "あなたが標的です — 逃げて",
   "hide-and-seek.overlay.huntTarget": "{name} を追え",
   "hide-and-seek.overlay.preyCaught": "{name} は {time} 持ちこたえました",
-  "hide-and-seek.overlay.preyEscaped": "{name} は {time} 後に逃げ切りました"
+  "hide-and-seek.overlay.preyEscaped": "{name} は {time} 後に逃げ切りました",
+  "hide-and-seek.overlay.preyLeft": "{name} は狩りを抜けました"
 }

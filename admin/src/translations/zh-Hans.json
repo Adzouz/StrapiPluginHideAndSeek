@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "本局结束",
   "hide-and-seek.error.notEnoughPlayers": "至少需要 2 名已准备的玩家",
   "hide-and-seek.error.roundRunning": "已有一局正在进行",
+  "hide-and-seek.error.preyNotReady": "目标玩家尚未准备就绪",
   "hide-and-seek.leaderboard.empty": "还没有玩过任何一局。赢一局，这个榜就是你的。",
   "hide-and-seek.leaderboard.players": "共 {count} 名玩家",
   "hide-and-seek.leaderboard.points": "积分",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "你是目标 —— 快跑",
   "hide-and-seek.overlay.huntTarget": "追捕 {name}",
   "hide-and-seek.overlay.preyCaught": "{name} 坚持了 {time}",
-  "hide-and-seek.overlay.preyEscaped": "{name} 在 {time} 后逃脱"
+  "hide-and-seek.overlay.preyEscaped": "{name} 在 {time} 后逃脱",
+  "hide-and-seek.overlay.preyLeft": "{name} 退出了追捕"
 }

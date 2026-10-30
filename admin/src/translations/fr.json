@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Partie terminée",
   "hide-and-seek.error.notEnoughPlayers": "Il faut au moins 2 joueurs prêts",
   "hide-and-seek.error.roundRunning": "Une partie est déjà en cours",
+  "hide-and-seek.error.preyNotReady": "Le joueur traqué n’est pas prêt",
   "hide-and-seek.leaderboard.empty": "Aucune partie jouée. Gagnez-en une et le classement est à vous.",
   "hide-and-seek.leaderboard.players": "{count} joueurs au total",
   "hide-and-seek.leaderboard.points": "points",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "Vous êtes la proie — courez",
   "hide-and-seek.overlay.huntTarget": "Traquez {name}",
   "hide-and-seek.overlay.preyCaught": "{name} a tenu {time}",
-  "hide-and-seek.overlay.preyEscaped": "{name} s’en est sorti après {time}"
+  "hide-and-seek.overlay.preyEscaped": "{name} s’en est sorti après {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} a quitté la traque"
 }

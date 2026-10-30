@@ -104,6 +104,31 @@ module.exports = {
       }
     });
 
+    // Every phase of a round keeps the deletion guards armed and the admin
+    // session from going idle, so each phase needs a ceiling — not only the
+    // three the lobby can change. A countdown measured in years is an outage
+    // with a timer on it.
+    const ceilings = {
+      countdownSeconds: 60,
+      hideSeconds: 120,
+      roundSeconds: 3600,
+      forfeitAfterMs: 300000,
+    };
+
+    Object.entries(ceilings).forEach(([key, max]) => {
+      if (config[key] !== undefined && config[key] > max) {
+        throw new Error(`[hide-and-seek] config.${key} must not exceed ${max}`);
+      }
+    });
+
+    // Whole units only: these are floored on the way in, and flooring 0.5
+    // silently yields 0 — a round that ends on the tick it begins.
+    ['countdownSeconds', 'hideSeconds', 'roundSeconds', 'seekerCount'].forEach((key) => {
+      if (config[key] !== undefined && !Number.isInteger(config[key])) {
+        throw new Error(`[hide-and-seek] config.${key} must be a whole number`);
+      }
+    });
+
     if (
       config.hiderSpeedLimit !== undefined &&
       (typeof config.hiderSpeedLimit !== 'number' || config.hiderSpeedLimit < 0)

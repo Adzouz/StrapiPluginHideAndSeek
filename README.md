@@ -322,8 +322,20 @@ Strapi's router answers **409 `HideAndSeekRoundInProgress`** to:
 
 The refusal says only that somebody is in the way. It names nobody and gives no
 ids: it is written before Strapi has authenticated the request, so it has to
-assume it is talking to a stranger. For the same reason a request with no bearer
-token is passed straight through to the 401 it was going to get anyway.
+assume it is talking to a stranger. For the same reason a request carrying no
+bearer token at all is passed straight through to the 401 it was going to get.
+
+What it cannot do is tell a real token from a string shaped like one — that
+check lives in the router, which has not run yet. So a caller who sends any
+`Authorization: Bearer …` header can still learn three things without being
+logged in: whether a round is running, whether a given admin user id is in it,
+and whether anybody is standing on a given entry or folder. No names, no other
+data, and nothing is modified. If that is more than your threat model allows,
+leave the plugin out of production rather than relying on the guard being quiet.
+
+Two known gaps, so nobody plans around a guarantee that is not there: deleting a
+content type outright (Content-Type Builder) and **moving** or renaming a folder
+are not guarded, and either can take a hiding spot away just as effectively.
 
 Everything else is untouched — creating, reading, updating, publishing, deleting
 anything nobody is standing on, and every deletion at all once the round is over.

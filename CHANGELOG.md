@@ -46,11 +46,21 @@ old values for 0.2.0's feel.
   or deactivating a player now also covers deleting a content entry, a single
   type, or a Media Library folder a player is standing on. See
   [What a 409 means for your API](README.md#what-a-409-means-for-your-api).
-- A unit suite (`npm run test:unit`) covering the game engine without a running
-  Strapi, alongside the existing live-server suites.
+- A unit suite (`npm run test:unit`) covering the game engine, the deletion
+  guard's request matchers and the config validator without a running Strapi,
+  alongside the existing live-server suites. It runs in CI and before publish.
 
 ### Fixed
 
+- **A percent-encoded path no longer walks past the deletion guards.** Koa's
+  router decodes a route parameter before the controller sees it; the guards
+  read the raw path, so `DELETE /admin/users/%37` was user 7 to Strapi and an
+  unknown id to the guard, which let it through mid-round.
+- **The folder guard matches the right numbers.** A Media Library URL carries
+  the folder's row id in `folder` and a chain of `pathId`s in `folderPath` —
+  two independent counters that stop agreeing the first time any folder is
+  deleted. The subtree is now resolved from the database instead of read off
+  the URL, so deleting a parent folder is refused for real.
 - **Catching a hider no longer freezes the seeker.** The lockdown survived the
   catch, leaving the winner of a standoff stuck in an empty room for the rest of
   `lockdownMs` while the player they had just caught walked free.
@@ -60,12 +70,32 @@ old values for 0.2.0's feel.
   explain it.
 - **Reloading while locked down no longer erases you.** A player who refreshed
   mid-standoff came back with no page at all: invisible, uncatchable, and
-  credited with surviving the round.
+  credited with surviving the round. The page now outlives the socket for as
+  long as the lockdown holds them to it, so a reload is neither an erasure nor
+  an escape, and does not earn a second lockdown either.
+- **A lockdown lifts for whoever is left standing.** It already lifted for a
+  seeker whose room emptied; a hider frozen by a seeker who closed their tab
+  stayed frozen for the full fifteen seconds.
+- **A `preyId` set in `config/plugins.ts` works.** Admin user ids are numbers
+  there and strings in the game, and `'3' === 3` is false — which, with the new
+  start check, made manhunt permanently unstartable rather than quietly random.
+- **Every phase of a round has a ceiling**, not just the three the lobby can
+  change. `countdownSeconds` had none, so it could hold the guards open just as
+  effectively as `roundSeconds`.
+- **The admin root is read from `admin.absoluteUrl`.** `admin.path` has the part
+  it shares with `server.url` stripped out, so on a Strapi served under a
+  sub-path it reports `/admin` while browsers are on `/cms/admin` — and the
+  entry guard matched nothing at all.
 - **A tab that lost the game stops acting like it still has it.** A superseded
   tab kept a frozen overlay, kept every link dimmed, and went on refreshing the
   admin session once a minute for as long as it stayed open.
 - **A backgrounded tab can reconnect.** A hider who tabbed away to hide and then
-  lost the socket could never reconnect, and was forfeited where they stood.
+  lost the socket could never reconnect, and was forfeited where they stood. The
+  licence to reconnect unseen expires after a minute, so a tab that slept
+  through a handover cannot wake up and take the game off the tab in use.
+- **A reconnect re-announces whether the tab is in the background**, so a hider
+  who tabbed away after losing the socket comes back parked and findable rather
+  than frozen at a stale cursor.
 - **Naming an un-ready player as the prey is now an error** rather than a silent
   substitution that dealt the named player spectator.
 - **A prey who quits is reported as quitting**, not as having "got away after
@@ -75,7 +105,15 @@ old values for 0.2.0's feel.
   `/\evil.example` looks like a local path to `startsWith('/')` and is not one.
 - **The deletion guard says less.** It runs ahead of Strapi's authentication, so
   it no longer returns player names, and a request with no bearer token is
-  passed through to the 401 it was going to get.
+  passed through to the 401 it was going to get. **Response-shape change for
+  anyone parsing it:** `error.details.players` is gone and the message no
+  longer names anyone. `error.details.action` is unchanged. What a caller with
+  a token-shaped header can still infer is written down in the README.
+- **A throw in the game loop cannot throw again while being logged**, and is
+  rate-limited rather than written twenty times a second for ever. A state
+  frame is marked sent only once it has been sent.
+- **A player with no page is no longer scored as having sat in the safe zone**
+  on projects whose admin is mounted at `/`.
 - **`roundSeconds` is capped on the config path too**, not only from the lobby.
   An unbounded round kept admin sessions open and the deletion guards armed for
   as long as it lasted.

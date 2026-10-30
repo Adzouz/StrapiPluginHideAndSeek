@@ -23,6 +23,8 @@ jobs:
 
       - run: npm run format:check
 
+      - run: npm run test:unit
+
       - run: npm run build
 
       # Confirms the built package still resolves through its exports map.

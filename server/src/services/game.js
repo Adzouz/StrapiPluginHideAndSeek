@@ -108,12 +108,16 @@ const entryOf = (page, adminPath = '/admin') => {
 };
 
 /**
- * The Media Library folders a page sits inside: the open folder plus every
- * ancestor, since deleting a folder takes its whole subtree with it. `folder`
- * is the open folder's id and `folderPath` is the `/1/5` chain of ids above it
- * — both are `pageQueryKeys` by default, so both are part of the page id.
+ * The Media Library room a page is in: the open folder's id, and its path.
+ *
+ * The two are deliberately kept apart. `folder` is the folder's row id, while
+ * `folderPath` is built from `pathId` — a counter of its own that the upload
+ * plugin increments per folder created. They agree until the first folder is
+ * deleted and then drift for ever, so comparing one against the other matches
+ * the wrong folders in both directions. Both are `pageQueryKeys` by default,
+ * so both are part of the page id.
  */
-const foldersOf = (page) => {
+const roomOf = (page) => {
   const query = String(page ?? '').split('?')[1];
 
   if (!query) {
@@ -127,9 +131,7 @@ const foldersOf = (page) => {
     return null;
   }
 
-  const ancestors = (params.get('folderPath') ?? '').split('/').filter(Boolean);
-
-  return new Set([String(id), ...ancestors]);
+  return { id: String(id), path: params.get('folderPath') || null };
 };
 
 /**
@@ -173,6 +175,13 @@ module.exports = ({ strapi }) => {
    * ceiling. Non-numeric settings (mode, caughtBecome, preyId) pass through.
    */
   const clampSetting = (key, value) => {
+    // Player ids are strings everywhere in here, but an installer writing
+    // `preyId: 3` in config/plugins.ts writes a number — and `'3' === 3` is
+    // false, which would make the named prey unfindable for ever.
+    if (key === 'preyId') {
+      return value === null || value === undefined ? null : String(value);
+    }
+
     if (!Number.isFinite(value)) {
       return value;
     }
@@ -239,8 +248,28 @@ module.exports = ({ strapi }) => {
   const playerBySocket = (socketId) =>
     [...state.players.values()].find((p) => p.sockets.has(socketId));
 
-  /** Where this project mounts the admin. Also the homepage: a truce. */
-  const adminRoot = () => normalisePath(strapi.config.get('admin.path', '/admin'));
+  /**
+   * Where this project mounts the admin, as the *browser* sees it. Also the
+   * homepage: a truce.
+   *
+   * Not `admin.path`: Strapi strips the part it has in common with
+   * `server.url` from that, so a project served under a sub-path reports
+   * `/admin` while the pathname a client reports is `/cms/admin`. The absolute
+   * URL is the one that keeps the prefix.
+   */
+  const adminRoot = () => {
+    const absolute = strapi.config.get('admin.absoluteUrl');
+
+    if (typeof absolute === 'string') {
+      try {
+        return normalisePath(new URL(absolute).pathname);
+      } catch {
+        /* fall back to the relative path below */
+      }
+    }
+
+    return normalisePath(strapi.config.get('admin.path', '/admin'));
+  };
 
   const isManhunt = () => settings().mode === MODE.MANHUNT;
 
@@ -248,7 +277,11 @@ module.exports = ({ strapi }) => {
    * Neutral ground makes no sense when the whole room is hunting one person:
    * they would simply stand on the homepage and run out the clock.
    */
-  const isSafe = (page) => config().safeZone && !isManhunt() && pathOf(page) === adminRoot();
+  // `Boolean(page)` first: pathOf(null) is '/', which is the admin root itself
+  // on a project whose admin is mounted there — so a player with no page at all
+  // would be scored as having sat out the round in the safe zone.
+  const isSafe = (page) =>
+    Boolean(page) && config().safeZone && !isManhunt() && pathOf(page) === adminRoot();
 
   /** A hider sharing a page with a seeker, outside the safe zone, is slowed. */
   const isSlowed = (player) =>
@@ -287,15 +320,6 @@ module.exports = ({ strapi }) => {
     player.connected = true;
     player.disconnectedAt = null;
 
-    // They reloaded while locked down. `leave()` dropped their page, and the
-    // lock gate in `setPage` would refuse to take the new one — leaving them
-    // with no page at all: invisible, uncatchable, and credited with surviving
-    // a round they spent on a loading screen. The lock is what they reloaded
-    // out of, so it goes with the page it was holding them on.
-    if (!player.page) {
-      player.lockedUntil = 0;
-    }
-
     touch();
 
     return player;
@@ -313,8 +337,17 @@ module.exports = ({ strapi }) => {
     if (player.sockets.size === 0) {
       player.connected = false;
       player.disconnectedAt = Date.now();
-      player.page = null;
       player.ready = false;
+
+      // Their page is the room the lockdown is holding them in, so while it is
+      // running the page outlives the socket. Dropping it would make a reload
+      // an escape from the standoff — and would strand them on their way back,
+      // because `setPage` then refuses to take the page they return on and
+      // they end up with none at all: invisible, uncatchable, and credited
+      // with surviving a round they spent on a loading screen.
+      if (state.status !== STATUS.HUNTING || Date.now() >= player.lockedUntil) {
+        player.page = null;
+      }
     }
 
     touch();
@@ -732,18 +765,25 @@ module.exports = ({ strapi }) => {
     const { lockdownMs } = config();
 
     // The lockdown exists to force a standoff, so it lifts the moment there is
-    // no standoff left: the hider was caught, dropped out, or — in manhunt —
-    // simply walked out, which they are allowed to do. A seeker left pinned in
-    // a room they have already emptied is a seeker somebody else has removed
-    // from the game. `catchPlayer` frees the one who made the catch in the same
-    // tick; this frees everyone else who was in the room with them.
+    // no standoff left: the other side was caught, dropped out, or — in manhunt
+    // — simply walked out, which the prey is allowed to do. Either way, a
+    // player left pinned in a room they are alone in has been removed from the
+    // game by somebody else's exit. It cuts both ways: a hider frozen by a
+    // seeker who closed their tab is the same unfairness as a seeker frozen by
+    // a hider they just caught. `catchPlayer` frees the one who made the catch
+    // in the same tick; this frees everyone else left standing in the room.
     state.players.forEach((player) => {
-      if (player.role !== ROLE.SEEKER || player.lockedUntil <= at) {
+      if (player.lockedUntil <= at) {
         return;
       }
 
-      const stillCornered = activeHiders().some(
-        (hider) => hider.connected && hider.page === player.page
+      const opponents =
+        player.role === ROLE.SEEKER
+          ? activeHiders()
+          : [...state.players.values()].filter((other) => other.role === ROLE.SEEKER);
+
+      const stillCornered = opponents.some(
+        (other) => other.id !== player.id && other.connected && other.page === player.page
       );
 
       if (!stillCornered) {
@@ -1201,20 +1241,41 @@ module.exports = ({ strapi }) => {
    * Players standing in one of these Media Library folders, or anywhere under
    * them. Deleting a folder deletes its whole subtree, so a hider two folders
    * down is stranded just as surely as one in the folder itself.
+   *
+   * Takes folders already resolved to `{ id, path }`, because only the database
+   * knows a folder's path and the two numbers in a Media Library URL are not
+   * interchangeable. A folder with no path still matches on its own id, which
+   * is the common case — the caller is free to pass what it has.
    */
-  const occupantsOfFolders = (folderIds = []) => {
-    if (!IN_ROUND.includes(state.status) || folderIds.length === 0) {
+  const occupantsOfFolders = (folders = []) => {
+    if (!IN_ROUND.includes(state.status) || folders.length === 0) {
       return [];
     }
 
-    const wanted = folderIds.map((id) => String(id));
+    const wanted = folders.map((folder) => ({
+      id: folder?.id === undefined || folder?.id === null ? null : String(folder.id),
+      path: typeof folder?.path === 'string' && folder.path ? folder.path : null,
+    }));
+
+    const covers = (folder, room) => {
+      if (folder.id !== null && folder.id === room.id) {
+        return true;
+      }
+
+      if (folder.path === null || room.path === null) {
+        return false;
+      }
+
+      // Their room is the folder itself, or somewhere in the subtree under it.
+      return room.path === folder.path || room.path.startsWith(`${folder.path}/`);
+    };
 
     return [...state.players.values()]
       .filter((player) => player.startedAs && player.page)
       .filter((player) => {
-        const rooms = foldersOf(player.page);
+        const room = roomOf(player.page);
 
-        return Boolean(rooms) && wanted.some((id) => rooms.has(id));
+        return Boolean(room) && wanted.some((folder) => covers(folder, room));
       })
       .map((player) => ({ id: player.id, name: player.name }));
   };

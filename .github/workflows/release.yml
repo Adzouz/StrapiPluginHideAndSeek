@@ -43,6 +43,8 @@ jobs:
 
       - run: npm run format:check
 
+      - run: npm run test:unit
+
       # prepublishOnly builds again; this fails the run early if the build is broken.
       - run: npm run build
 

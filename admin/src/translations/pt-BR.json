@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Rodada encerrada",
   "hide-and-seek.error.notEnoughPlayers": "São necessários pelo menos 2 jogadores prontos",
   "hide-and-seek.error.roundRunning": "Já existe uma rodada em andamento",
+  "hide-and-seek.error.preyNotReady": "O jogador caçado não está pronto",
   "hide-and-seek.leaderboard.empty": "Nenhuma rodada jogada ainda. Ganhe uma e o ranking é seu.",
   "hide-and-seek.leaderboard.players": "{count} jogadores no total",
   "hide-and-seek.leaderboard.points": "pontos",
@@ -82,5 +83,6 @@
   "hide-and-seek.overlay.youArePrey": "Você é a presa — corra",
   "hide-and-seek.overlay.huntTarget": "Cace {name}",
   "hide-and-seek.overlay.preyCaught": "{name} aguentou {time}",
-  "hide-and-seek.overlay.preyEscaped": "{name} escapou depois de {time}"
+  "hide-and-seek.overlay.preyEscaped": "{name} escapou depois de {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} abandonou a caçada"
 }

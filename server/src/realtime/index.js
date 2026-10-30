@@ -117,6 +117,10 @@ const setup = ({ strapi }) => {
   });
 
   let lastVersion = -1;
+  let failures = 0;
+
+  /** A deterministic throw fires 20x/s; log the first, then one in this many. */
+  const LOG_EVERY = 200;
 
   /**
    * Everything the game does happens in here, 20 times a second, on a timer
@@ -129,8 +133,13 @@ const setup = ({ strapi }) => {
       game.tick();
 
       if (game.state.version !== lastVersion) {
+        // Recorded only once the frame is actually out: marking it sent first
+        // means a throw in publicState() drops that state for good, and every
+        // client sits on stale state until something else bumps the version.
+        const payload = game.publicState();
+
+        io.emit('state', payload);
         lastVersion = game.state.version;
-        io.emit('state', game.publicState());
       }
 
       game.drainEvents().forEach((event) => {
@@ -162,7 +171,18 @@ const setup = ({ strapi }) => {
         socket.volatile.emit('peers', game.viewFor(socket.data.playerId));
       });
     } catch (error) {
-      strapi.log.error(`[hide-and-seek] tick failed: ${error.stack ?? error.message}`);
+      failures += 1;
+
+      // `error` is whatever was thrown, which need not be an Error at all —
+      // reading .stack off a thrown null would throw again, this time with
+      // nothing to catch it, which is the crash this block exists to prevent.
+      // The log is throttled because a deterministic throw happens 20 times a
+      // second, and a flood that fills the disk is its own outage.
+      if (failures === 1 || failures % LOG_EVERY === 0) {
+        strapi.log.error(
+          `[hide-and-seek] tick failed (${failures}x): ${error?.stack ?? error?.message ?? String(error)}`
+        );
+      }
     }
   };
 

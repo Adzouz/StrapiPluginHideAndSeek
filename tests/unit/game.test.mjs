@@ -133,7 +133,7 @@ describe('a catch', () => {
 });
 
 describe('reloading mid-lockdown', () => {
-  it('does not leave the player with no page at all', () => {
+  const standoff = () => {
     const game = makeGame();
     const [seeker, hider, spare] = seat(game, 3);
 
@@ -149,19 +149,51 @@ describe('reloading mid-lockdown', () => {
 
     assert.ok(hider.lockedUntil > Date.now(), 'the hider is locked in');
 
-    // The socket drops mid-standoff, and leave() takes their page with it.
+    return { game, seeker, hider };
+  };
+
+  it('does not leave the player with no page at all', () => {
+    const { game, seeker, hider } = standoff();
+    const pageAt = hider.pageAt;
+
+    // The socket drops mid-standoff. The page is the room the lock is holding
+    // them in, so it outlives the socket.
     game.leave('socket-2');
-    assert.equal(hider.page, null);
+    assert.equal(hider.page, '/admin/settings', 'still standing where they were');
 
     const back = game.join(user(2), 'socket-2b');
 
     game.setPage(back.id, '/admin/settings');
 
     assert.equal(back.page, '/admin/settings', 'they are back in the room they reloaded out of');
+    assert.equal(back.pageAt, pageAt, 'and are not dealt a second full lockdown for refreshing');
     assert.ok(
       game.peersFor(seeker.id).some((peer) => peer.id === back.id),
       'and the seeker can still see them'
     );
+  });
+
+  it('is not an escape from the standoff', () => {
+    const { game } = standoff();
+
+    game.leave('socket-2');
+    const back = game.join(user(2), 'socket-2b');
+
+    // Cmd+R and then click away: the whole point of the lockdown is that this
+    // does not work.
+    game.setPage(back.id, '/admin/plugins/upload');
+
+    assert.equal(back.page, '/admin/settings', 'the lock still holds them to the room');
+    assert.ok(back.lockedUntil > Date.now(), 'and is still running');
+  });
+
+  it('releases the page once the lock has lapsed', () => {
+    const { game, hider } = standoff();
+
+    hider.lockedUntil = 0;
+    game.leave('socket-2');
+
+    assert.equal(hider.page, null, 'nothing is holding them anywhere any more');
   });
 });
 
@@ -271,20 +303,54 @@ describe('the deletion guards', () => {
     );
   });
 
+  // The two numbers in a Media Library URL come from different counters, and a
+  // fixture where they coincide proves nothing. Here the open folder has id 12
+  // and pathId 7, and its parent has id 3 and pathId 4 — the shape Strapi
+  // produces as soon as any folder has ever been deleted.
+  const MEDIA_LIBRARY = '/admin/plugins/upload?folder=12&folderPath=/4/7';
+  const PARENT = { id: 3, path: '/4' };
+  const ITSELF = { id: 12, path: '/4/7' };
+
   it('finds a player inside a Media Library folder', () => {
-    const { game, hider } = inRound({ page: '/admin/plugins/upload?folder=5&folderPath=/1/5' });
+    const { game, hider } = inRound({ page: MEDIA_LIBRARY });
 
     assert.deepEqual(
-      game.occupantsOfFolders(['5']).map((p) => p.id),
+      game.occupantsOfFolders([ITSELF]).map((p) => p.id),
       [hider.id],
       'the folder they are in'
     );
     assert.deepEqual(
-      game.occupantsOfFolders([1]).map((p) => p.id),
+      game.occupantsOfFolders([PARENT]).map((p) => p.id),
       [hider.id],
       'and every folder above it, because deleting one deletes the subtree'
     );
-    assert.deepEqual(game.occupantsOfFolders(['9']), [], 'but not an unrelated folder');
+  });
+
+  it('does not mistake a folder id for an ancestor pathId', () => {
+    const { game } = inRound({ page: MEDIA_LIBRARY });
+
+    // Folder id 4 is some unrelated folder that merely shares a number with an
+    // ancestor's pathId. Matching the two spaces against each other would both
+    // refuse this delete and miss the one above.
+    assert.deepEqual(game.occupantsOfFolders([{ id: 4, path: '/9' }]), []);
+    assert.deepEqual(game.occupantsOfFolders([{ id: 7, path: '/11' }]), []);
+  });
+
+  it('does not match a sibling whose path merely shares a prefix', () => {
+    const { game } = inRound({ page: MEDIA_LIBRARY });
+
+    // '/4/7' must not be read as living under '/4/70'.
+    assert.deepEqual(game.occupantsOfFolders([{ id: 99, path: '/4/70' }]), []);
+  });
+
+  it('still matches on the id alone when the path could not be resolved', () => {
+    const { game, hider } = inRound({ page: MEDIA_LIBRARY });
+
+    assert.deepEqual(
+      game.occupantsOfFolders([{ id: 12, path: null }]).map((p) => p.id),
+      [hider.id]
+    );
+    assert.deepEqual(game.occupantsOfFolders([{ id: 3, path: null }]), [], 'but not the subtree');
     assert.deepEqual(game.occupantsOfFolders([]), []);
   });
 
@@ -299,7 +365,7 @@ describe('the deletion guards', () => {
       game.occupantsOf({ model: 'api::article.article', documentIds: ['doc-1'] }),
       []
     );
-    assert.deepEqual(game.occupantsOfFolders(['5']), []);
+    assert.deepEqual(game.occupantsOfFolders([{ id: 12, path: '/4/7' }]), []);
   });
 });
 
