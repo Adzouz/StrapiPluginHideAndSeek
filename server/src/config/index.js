@@ -6,9 +6,13 @@ module.exports = {
   default: {
     /** Seconds of "3… 2… 1…" before the seeker is revealed. */
     countdownSeconds: 3,
-    /** Seconds hiders get to scatter while the seeker is blindfolded. */
+    /** Seconds hiders get to scatter while the seeker is blindfolded. Capped at 120. */
     hideSeconds: 10,
-    /** Hard time limit of a hunt. Hiders still free when it expires win. */
+    /**
+     * Hard time limit of a hunt. Hiders still free when it expires win. Capped
+     * at 3600: while a round runs the plugin holds admin sessions open and
+     * refuses some deletions, and neither should be able to last a week.
+     */
     roundSeconds: 600,
     /**
      * A hider stays invisible for this long after a seeker lands on their page.
@@ -51,7 +55,7 @@ module.exports = {
     hintRepeatMs: 20000,
     /** What a caught player becomes: 'seeker' (tag team) or 'spectator'. */
     caughtBecome: ROLE.SEEKER,
-    /** How many seekers are drawn at the start of a round. */
+    /** How many seekers are drawn at the start of a round. Capped at 50. */
     seekerCount: 1,
     /**
      * 'classic' deals one or more seekers against the rest. 'manhunt' puts a
@@ -114,8 +118,32 @@ module.exports = {
       throw new Error('[hide-and-seek] config.graceMs must be a number >= 0');
     }
 
-    if (config.safeZone !== undefined && typeof config.safeZone !== 'boolean') {
-      throw new Error('[hide-and-seek] config.safeZone must be a boolean');
+    // `preyEscapesLockdown: 'false'` is a string, and a string is truthy — it
+    // would quietly turn the exemption *on*. Booleans are checked as booleans.
+    ['safeZone', 'preyEscapesLockdown'].forEach((key) => {
+      if (config[key] !== undefined && typeof config[key] !== 'boolean') {
+        throw new Error(`[hide-and-seek] config.${key} must be a boolean`);
+      }
+    });
+
+    if (config.mode !== undefined && !Object.values(MODE).includes(config.mode)) {
+      throw new Error("[hide-and-seek] config.mode must be 'classic' or 'manhunt'");
+    }
+
+    // socket.io accepts a boolean, a string, an array of strings or a function.
+    if (
+      config.corsOrigin !== undefined &&
+      typeof config.corsOrigin !== 'boolean' &&
+      typeof config.corsOrigin !== 'string' &&
+      typeof config.corsOrigin !== 'function' &&
+      !(
+        Array.isArray(config.corsOrigin) &&
+        config.corsOrigin.every((origin) => typeof origin === 'string')
+      )
+    ) {
+      throw new Error(
+        '[hide-and-seek] config.corsOrigin must be a boolean, a string, an array of strings or a function'
+      );
     }
 
     if (

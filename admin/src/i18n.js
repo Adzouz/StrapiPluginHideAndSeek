@@ -44,6 +44,7 @@ export const defaults = {
 
   'error.notEnoughPlayers': 'Need at least 2 ready players',
   'error.roundRunning': 'A round is already running',
+  'error.preyNotReady': 'The hunted player is not ready',
 
   'leaderboard.empty': 'No rounds played yet. Win one and the board is yours.',
   'leaderboard.players': '{count} players all-time',
@@ -68,6 +69,7 @@ export const defaults = {
   'overlay.huntTarget': 'Hunt {name}',
   'overlay.preyCaught': '{name} lasted {time}',
   'overlay.preyEscaped': '{name} got away after {time}',
+  'overlay.preyLeft': '{name} quit the hunt',
   'overlay.youAreSpectator': 'You are a spectator',
   'overlay.safeZone': 'Safe zone',
   'overlay.hintHere': 'Someone is through here',

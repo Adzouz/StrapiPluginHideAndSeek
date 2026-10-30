@@ -12,7 +12,10 @@ jobs:
       # Required for npm provenance: it signs the package against this workflow
       # run, so npmjs.com can show which commit actually produced the tarball.
       id-token: write
-      contents: read
+      # The release step creates a GitHub release, which is a write. With
+      # `read` it 403s — after npm publish has already succeeded, so the
+      # version is out and the run is red.
+      contents: write
 
     steps:
       - uses: actions/checkout@v4

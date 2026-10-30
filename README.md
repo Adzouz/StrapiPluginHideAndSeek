@@ -87,8 +87,9 @@ they end on _is_ their hiding spot.
 
 **4. Hunting.** The seeker browses the admin looking for company. The moment a
 seeker and a hider share a page they see each other at once, and **both are
-locked in**: links stop working for a few seconds, so the hider has to dodge
-rather than click away. The hider is also **slowed** — their marker chases their
+locked in**: links stop working for `lockdownMs` — fifteen seconds by default —
+so the hider has to dodge rather than click away. The hider is also **slowed** —
+their marker chases their
 real cursor at a capped speed instead of being it, so flicking the mouse across
 the screen buys distance over time rather than instantly. The seeker catches them
 by holding their own cursor on the marker for a beat.
@@ -119,6 +120,11 @@ newest tab and disconnects the older one, which is told why. With two tabs live
 they would both report a page, the server would keep whichever spoke last, and
 you would end up standing wherever your other tab happened to be — including on
 pages you had already left or deleted.
+
+This applies to any two admin tabs open under the same account, in every phase,
+whether or not a round is running: the rule has to hold before a round starts or
+the second tab is still there when one does. The older tab says so and takes the
+game back the moment you click in it.
 
 ### Manhunt
 
@@ -219,10 +225,16 @@ delete that row to wipe the board.
   admin does not cost you the game.
 - **No removing the players.** While a round is on, the admin API refuses to
   delete an admin user who is in it — single or batch — or to deactivate them,
-  answering 409 and naming who is playing. The lobby is built out of admin users,
-  so removing one mid-game strands everyone waiting on a player who no longer
-  exists. Everything else still works: renaming a player, editing their roles,
-  and deleting or deactivating anyone not in the round.
+  answering 409. The lobby is built out of admin users, so removing one mid-game
+  strands everyone waiting on a player who no longer exists. Everything else
+  still works: renaming a player, editing their roles, and deleting or
+  deactivating anyone not in the round.
+- **No deleting the room somebody is in.** The same 409 covers deleting a
+  content entry or a Media Library folder a player is standing on — single
+  delete, bulk delete, and a folder's whole subtree. The deletion would succeed
+  on the server while their tab kept showing the old page, leaving them at an
+  address nobody else can reach. See [What a 409 means for your
+  API](#what-a-409-means-for-your-api).
 - **No hollow rounds.** If every seeker leaves, the round ends there and then and
   the hiders win — nobody is left to find them. The same goes the other way: if
   the last hider walks out, the seekers have found everyone there is to find.
@@ -240,7 +252,7 @@ export default {
     enabled: true,
     config: {
       hideSeconds: 10,
-      lockdownMs: 4000,
+      lockdownMs: 15000,
       caughtBecome: 'seeker',
     },
   },
@@ -265,14 +277,22 @@ export default {
 | `caughtBecome`        | `'seeker'`                 | `'seeker'` for tag-team, or `'spectator'`.                                                                             |
 | `seekerCount`         | `1`                        | Seekers drawn at the start of a round.                                                                                 |
 | `mode`                | `'classic'`                | `'classic'` deals seekers against the rest; `'manhunt'` puts one named player against the whole room.                  |
-| `preyId`              | `null`                     | Manhunt only: who is hunted. Falls back to a random player.                                                            |
+| `preyId`              | `null`                     | Manhunt only: who is hunted. Null draws at random; naming somebody who is not ready is a start error.                  |
 | `preyEscapesLockdown` | `true`                     | Manhunt only: whether the prey is exempt from the lockdown.                                                            |
 | `forfeitAfterMs`      | `20000`                    | A disconnected hider forfeits after this.                                                                              |
 | `tickHz`              | `20`                       | Server tick and position broadcast rate.                                                                               |
 | `corsOrigin`          | `true`                     | socket.io CORS origin. `true` reflects the request origin.                                                             |
 
-`caughtBecome`, `hideSeconds`, `roundSeconds` and `seekerCount` can also be
-changed from the lobby widget between rounds, without a restart.
+`mode`, `preyId`, `caughtBecome`, `hideSeconds`, `roundSeconds` and
+`seekerCount` can also be changed from the lobby widget between rounds, without
+a restart. A lobby change lasts until the server restarts; the configured value
+is what it starts from.
+
+Three of those are capped, wherever they are set — in `config/plugins.ts` as
+well as from the lobby: `hideSeconds` at 120, `roundSeconds` at 3600 and
+`seekerCount` at 50. A round holds admin sessions open and keeps the deletion
+guards below armed for as long as it lasts, so an eleven-day round is not a
+setting, it is an outage. Anything higher is silently floored to the ceiling.
 
 ### Tuning the feel
 
@@ -283,6 +303,34 @@ while they are. At the defaults a cornered hider is frozen for 15 seconds and ca
 should usually win. Earlier defaults (4s, 0.55, 0.06) made hiders very hard to
 catch. Raise `hiderSpeedLimit` and lower `lockdownMs` for slippery hiders; the
 three numbers are the whole difficulty dial.
+
+## What a 409 means for your API
+
+This is the most invasive thing the plugin does to the app it is installed in,
+so it is worth knowing before you install it. While a round is running —
+`countdown`, `hiding` or `hunting`, never otherwise — a middleware ahead of
+Strapi's router answers **409 `HideAndSeekRoundInProgress`** to:
+
+| Request                                                            | Refused when                                               |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `DELETE /admin/users/:id`, `POST /admin/users/batch-delete`        | one of those users is dealt into the round                 |
+| `PUT /admin/users/:id` with `isActive: false`                      | the same                                                   |
+| `DELETE /content-manager/collection-types/:model/:id`              | a player is standing on that entry's page                  |
+| `POST /content-manager/collection-types/:model/actions/bulkDelete` | a player is standing on one of those entries               |
+| `DELETE /content-manager/single-types/:model`                      | a player is standing on that single type's page            |
+| `POST /upload/actions/bulk-delete` with `folderIds`                | a player is standing in one of those folders, or below one |
+
+The refusal says only that somebody is in the way. It names nobody and gives no
+ids: it is written before Strapi has authenticated the request, so it has to
+assume it is talking to a stranger. For the same reason a request with no bearer
+token is passed straight through to the 401 it was going to get anyway.
+
+Everything else is untouched — creating, reading, updating, publishing, deleting
+anything nobody is standing on, and every deletion at all once the round is over.
+If a 409 is ever unwelcome, end the round from the lobby widget's **Abort round**
+button, which any player can press, or take the plugin out of `config/plugins.ts`.
+Scripts and integrations that delete content on a schedule are the thing to think
+about here: give them a retry, or do not play while they run.
 
 ## How it works
 
@@ -315,13 +363,16 @@ out mid-round. While a round is running the plugin polls an authenticated
 endpoint once a minute, which keeps the admin's token refreshed on its own
 schedule.
 
-For long sessions you can also widen the window in `config/admin.ts`:
+On **Strapi 5.24 or later** you can also widen the window in `config/admin.ts`.
+The `auth.sessions` block does not exist before 5.24 — on an older host these
+keys are read by nobody, and the poll above is the whole of what keeps a round
+alive. The values are **seconds**, not milliseconds:
 
 ```ts
 auth: {
   sessions: {
-    idleSessionLifespan: 60 * 60 * 1000, // and idleRefreshTokenLifespan,
-    maxSessionLifespan: 8 * 60 * 60 * 1000, // maxRefreshTokenLifespan
+    idleSessionLifespan: 60 * 60, // 1 hour; and idleRefreshTokenLifespan
+    maxSessionLifespan: 8 * 60 * 60, // 8 hours; and maxRefreshTokenLifespan
   },
 },
 ```
@@ -405,6 +456,16 @@ that installing this package somewhere without git does not fail.
 
 ## Tests
 
+`npm run test:unit` is the only suite that needs nothing running. It drives the
+game engine directly with a stub Strapi and no clock to wait out, and covers the
+rules that are hard to reach from the outside: the settings ceilings, what a
+catch does to the seeker's lockdown, reloading mid-standoff, the manhunt draw,
+the page ids the server refuses to store, and both deletion guards — including a
+project that mounts the admin somewhere other than `/admin`.
+
+Everything below plays against a real Strapi, with real admin users and real
+sockets. Point them at a scratch project.
+
 `tests/e2e.mjs` plays a full headless round against a running Strapi: it logs two
 admin users in, takes tickets, connects both sockets and asserts that roles stay
 secret during the countdown, that both sides see each other the moment they share
@@ -422,9 +483,11 @@ logging out gives it up at once, a player who never comes back is swept, and
 leaving mid-round drops you from it — including the case where the last seeker
 walks out and the round ends on the spot.
 
-`tests/deletion.mjs` checks the guard that stops an admin user being deleted or
-deactivated out of a running round — and that it gets out of the way in the lobby, for
-non-players, and once the round is over. Every account it deletes is one it
+`tests/deletion.mjs` checks the guards that stop an admin user being deleted or
+deactivated out of a running round, and an entry or a Media Library folder being
+deleted out from under a player standing in it — that they get out of the way in
+the lobby, for non-players, for an unoccupied room and once the round is over,
+and that they tell an unauthenticated caller nothing. Every account it deletes is one it
 created for the purpose, so it leaves your test users alone; still, point it at a
 scratch project rather than anything you care about.
 

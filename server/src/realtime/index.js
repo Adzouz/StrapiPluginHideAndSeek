@@ -118,8 +118,14 @@ const setup = ({ strapi }) => {
 
   let lastVersion = -1;
 
-  loop = setInterval(
-    () => {
+  /**
+   * Everything the game does happens in here, 20 times a second, on a timer
+   * with nothing above it. An exception escaping this callback is an uncaught
+   * exception in the host's process — a game bug would take the whole CMS
+   * down with it. Log it and keep ticking instead.
+   */
+  const step = () => {
+    try {
       game.tick();
 
       if (game.state.version !== lastVersion) {
@@ -155,9 +161,12 @@ const setup = ({ strapi }) => {
         // Carries the player's own lockdown deadline alongside what they can see.
         socket.volatile.emit('peers', game.viewFor(socket.data.playerId));
       });
-    },
-    Math.round(1000 / cfg.tickHz)
-  );
+    } catch (error) {
+      strapi.log.error(`[hide-and-seek] tick failed: ${error.stack ?? error.message}`);
+    }
+  };
+
+  loop = setInterval(step, Math.round(1000 / cfg.tickHz));
 
   strapi.log.info(`[hide-and-seek] real-time server listening on ${SOCKET_PATH}`);
 };

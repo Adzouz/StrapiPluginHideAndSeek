@@ -218,6 +218,22 @@ const HidingBanner = ({ game, now }) => (
   </div>
 );
 
+/**
+ * The headline of a manhunt result. A prey who closed their tab neither escaped
+ * nor was caught, and has no survival time to print — without a branch of their
+ * own the card used to announce they "got away after 0:00".
+ */
+const manhuntHeadline = (result) => {
+  if (result.prey.left) {
+    return t('overlay.preyLeft', { name: result.prey.name });
+  }
+
+  return t(result.prey.caught ? 'overlay.preyCaught' : 'overlay.preyEscaped', {
+    name: result.prey.name,
+    time: formatClock(Math.round((result.preySurvivedMs ?? 0) / 1000)),
+  });
+};
+
 const Results = ({ game, me }) => {
   const { result } = game;
   const won =
@@ -229,10 +245,7 @@ const Results = ({ game, me }) => {
       <div className="hns-card">
         <div className="hns-title" style={{ marginBottom: 4 }}>
           {result.mode === MODE.MANHUNT && result.prey
-            ? t(result.prey.caught ? 'overlay.preyCaught' : 'overlay.preyEscaped', {
-                name: result.prey.name,
-                time: formatClock(Math.round((result.preySurvivedMs ?? 0) / 1000)),
-              })
+            ? manhuntHeadline(result)
             : result.winner === 'seekers'
               ? `🔦 ${t('overlay.seekersWin')}`
               : `🥷 ${t('overlay.hidersWin')}`}
@@ -335,14 +348,21 @@ export const Overlay = () => {
     };
   }, [hintPath, safePath]);
 
+  // A toast outlives the round it belongs to: "the game moved to your other
+  // tab" is shown precisely when this tab has just stopped having one, and it
+  // is the only thing telling the player how to get it back.
+  const toastNode = toast ? (
+    <div className={`hns-toast hns-toast--${toast.kind}`}>{toast.text}</div>
+  ) : null;
+
   if (!game || !playerId) {
-    return null;
+    return toastNode;
   }
 
   const me = game.players.find((player) => player.id === playerId);
 
   if (!me) {
-    return null;
+    return toastNode;
   }
 
   const hidingStartedAt = game.phaseEndsAt
@@ -399,7 +419,7 @@ export const Overlay = () => {
         <Results game={game} me={me} />
       ) : null}
 
-      {toast ? <div className={`hns-toast hns-toast--${toast.kind}`}>{toast.text}</div> : null}
+      {toastNode}
     </>
   );
 };

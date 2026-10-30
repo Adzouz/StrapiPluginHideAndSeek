@@ -135,6 +135,18 @@ const run = async () => {
   const spareOff = await setActive(admin, bystander.id, false);
   check(spareOff.status !== 409, `deactivating a non-player is fine (${spareOff.status})`);
 
+  // The guard runs ahead of Strapi's router, which is where authentication is
+  // composed — so it answers before anyone has proved who they are. It must
+  // give an anonymous caller nothing: not a name, not an id, not even the fact
+  // that there is a round on.
+  const anonymous = await api(`/admin/users/${player.id}`, { method: 'DELETE' });
+  check(anonymous.status === 401, `an unauthenticated delete still gets 401 (${anonymous.status})`);
+  check(!JSON.stringify(blocked.body).includes('Throwaway'), 'the refusal names nobody');
+  check(
+    blocked.body?.error?.details?.players === undefined,
+    'and carries no player list to read ids out of'
+  );
+
   console.log('\nentries somebody is hiding in');
   const MODEL = 'api::article.article';
   const OCCUPIED = 'hns-doc-1';
@@ -182,6 +194,41 @@ const run = async () => {
   check(
     vacated.status !== 409,
     `once they move on, the entry is deletable again (${vacated.status})`
+  );
+
+  console.log('\nMedia Library folders somebody is hiding in');
+  // Folders are the one room type built out of a query string, so the entry
+  // matcher cannot see them: the delete names folder ids and nothing else.
+  // `folderPath` is the chain of ancestors, and deleting any of them takes the
+  // whole subtree — and the player standing in it — with it.
+  const bulkDeleteFolders = (folderIds) =>
+    api('/upload/actions/bulk-delete', { method: 'POST', token: admin, body: { folderIds } });
+
+  guest2.socket.emit('page', { path: '/admin/plugins/upload?folder=99&folderPath=/98/99' });
+  await sleep(700);
+
+  const folder = await bulkDeleteFolders([99]);
+  check(folder.status === 409, `deleting an occupied folder refused with ${folder.status}`);
+  check(
+    folder.body?.error?.details?.action === 'delete-folder',
+    `refusal names the action: ${folder.body?.error?.details?.action}`
+  );
+
+  const ancestor = await bulkDeleteFolders([98]);
+  check(
+    ancestor.status === 409,
+    `deleting the folder above it is refused too (${ancestor.status})`
+  );
+
+  const elsewhere = await bulkDeleteFolders([97]);
+  check(elsewhere.status !== 409, `an unoccupied folder is untouched (${elsewhere.status})`);
+
+  guest2.socket.emit('page', { path: '/admin/plugins/elsewhere' });
+  await sleep(600);
+  const vacatedFolder = await bulkDeleteFolders([99]);
+  check(
+    vacatedFolder.status !== 409,
+    `once they move on, the folder is deletable again (${vacatedFolder.status})`
   );
 
   console.log('\nafter the round');
