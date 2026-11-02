@@ -5,3 +5,6 @@ dist
 
 # Cached admin tokens for the test suites
 tests/.tokens.json
+
+# Review runs from the hns-review-changes skill
+.reviews
