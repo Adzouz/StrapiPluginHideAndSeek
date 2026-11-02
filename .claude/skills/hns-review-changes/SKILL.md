@@ -1,25 +1,27 @@
 ---
 name: hns-review-changes
-description: Reviews a pull request or branch of strapi-plugin-hide-and-seek through the plugin's own failure modes, with subagents that have never seen the author's reasoning, and emits an anchored overview. Use when the user wants this plugin's PR, branch or working tree reviewed, wants a neutral second opinion on changes an agent just wrote, or wants findings ranked as merge-blockers.
+description: Reviews a pull request or branch of strapi-plugin-hide-and-seek through the plugin's own failure modes, with agents that have never seen the author's reasoning, then posts a GO / GO WITH NITS / NO GO review to GitHub with inline comments. Use when the user wants this plugin's PR, branch or working tree reviewed, wants a neutral second opinion on changes an agent just wrote, or wants a verdict posted on a PR.
 ---
 
 # Hide and Seek — Review Changes
 
-Reviews a candidate against the code it will ship beside. A generic checklist misses what actually breaks this plugin — a Koa middleware mounted ahead of authentication, two Media Library counters that look like one number, a game loop whose throw takes the host Strapi down, a second React root that outlives the page it drew on — so the review reads the diff through the plugin's own architecture.
+Reviews a candidate against the code it will ship beside, then posts the verdict. A generic checklist misses what actually breaks this plugin — a Koa middleware mounted ahead of authentication, two Media Library counters that look like one number, a game loop whose throw takes the host Strapi down, a second React root that outlives the page it drew on — so the review reads the diff through the plugin's own architecture.
 
-It posts nothing to GitHub. It writes no code. Its output is an overview the author reads, plus the satellite analyses behind it.
+## Why this skill exists
 
-Adapted from `strapi-review-changes` in cms-brain, minus the intake contract that skill depends on: this repo has no ingest step, so this skill does its own preflight and derives its own depth.
+Because the author of the change is usually the agent being asked to review it, and an agent grading its own homework finds its own reasoning persuasive. **Neutrality is the deliverable.** If the briefs leak the author's conclusions, the run is worthless however many agents it spawns — it has bought agreement, not review.
 
-## Why this skill exists at all
+## What it should cost
 
-Because the author of the change is usually the agent being asked to review it, and an agent grading its own homework finds its own reasoning persuasive. **Neutrality is the deliverable**, not the findings. If the briefs leak the author's conclusions, the run is worthless however many agents it spawns — it has bought agreement, not review.
+**A review is four to six agents.** That is the budget, not a target to grow into. A 46-file diff with 2700 added lines is a `review`, not a siege. If you find yourself planning more than six, the partition is wrong — merge shards, do not add them.
+
+`siege` exists for the rare change that can break something expensive and quietly, and **it only runs when the user asks for it by name.** No file, zone or size triggers it. A siege costs three to five times a review and ends in the same verdict.
 
 ## Entry
 
 | Given         | First step                                                              |
 | ------------- | ----------------------------------------------------------------------- |
-| a PR number   | `gh pr view <n> --json headRefOid,baseRefName,title,body,files`         |
+| a PR number   | `gh pr view <n> --json headRefOid,baseRefName,title,files`              |
 | a branch name | `git rev-parse <branch>`, base is `main` unless the user says otherwise |
 | nothing       | review the current branch against `main`                                |
 
@@ -27,7 +29,7 @@ Because the author of the change is usually the agent being asked to review it, 
 
 ## Preflight
 
-Read-only, and mechanical. Run it before anything is spawned.
+Read-only and mechanical. Before anything is spawned.
 
 ```bash
 /usr/bin/git rev-parse --abbrev-ref HEAD
@@ -39,22 +41,60 @@ gh pr view <n> --json headRefOid --jq .headRefOid   # when a PR number was given
 
 Three hard stops, each reported rather than worked around:
 
-- **A dirty tree.** Uncommitted work is not in the PR; reviewing it produces findings nobody can act on and misses code that is shipping. Stop and say so.
-- **`HEAD` ≠ the PR's `headRefOid`.** Local commits that were never pushed are not in the PR. Say which commits GitHub does not have, and ask whether to review the local branch or the pushed head. **Never silently review one and label it the other.**
-- **No changed files.** Nothing to review.
+- **A dirty tree.** Uncommitted work is not in the PR.
+- **`HEAD` ≠ the PR's `headRefOid`.** Say which commits GitHub does not have and ask which to review. **Never silently review one and label it the other.**
+- **No changed files.**
 
-Record `head`, `base` and the changed-file list; they go in the overview's provenance block verbatim.
+Then run the checks once and hand the result down as a fact: `npm run lint`, `npm run format:check`, `npm run test:unit`. The seven live-server suites need a running Strapi with real admin users; they are never run from here, and the verdict says so.
 
 ## Neutrality contract
 
-Binds the parent. Every rule here exists because breaking it is cheap and invisible.
+Binds the parent. Every rule exists because breaking it is cheap and invisible.
 
-1. **Fresh agents, never forks.** Spawn with `subagent_type: "general-purpose"`. A fork inherits this conversation — including every conclusion the author already reached — which is the one thing a neutral review cannot contain.
-2. **Briefs carry files and questions, never answers.** A brief may name paths, zones, lens rows, the diff range and the run's constants. It may not carry the author's finding list, a hypothesis, a "check whether X is still broken", or a summary of what the change is supposed to fix. Hand the agent the diff and the lens; let it find what it finds.
-3. **The commit messages and the CHANGELOG are claims under test, not evidence.** They may be read — a claim that the code does not implement is itself a finding — but a shard that treats "the CHANGELOG says this is fixed" as proof has reviewed nothing.
-4. **Prior review output is out of scope.** Any earlier overview in the review folder stays out of every brief. The parent may compare afterwards, in chat, once this run's findings exist.
-5. **The parent reviews nothing.** It preflights, partitions, briefs, reconciles and assembles. A parent that "just checks one file itself" has reintroduced the anchoring the rest of this is built to avoid.
-6. **Read-only.** No subagent edits a file, starts a Strapi, binds a port, installs anything, or runs a test suite. The parent may run `npm run lint`, `npm run format:check` and `npm run test:unit` before spawning, and hands the **result** down as a fact. The seven live-server suites need a running Strapi with real admin users and are therefore never run from here; the overview says so.
+1. **Fresh agents, never forks.** Spawn with `subagent_type: "general-purpose"`. A fork inherits this conversation, including every conclusion the author already reached.
+2. **Briefs carry files and questions, never answers.** No finding list, no hypothesis, no "check whether X is still broken".
+3. **The commit messages, CHANGELOG and README are claims under test, not evidence.** A claim the code does not implement is itself a finding.
+4. **Prior review output stays out of every brief.**
+5. **The parent reviews nothing.** It preflights, partitions, briefs, reconciles, assembles and posts.
+6. **Read-only subagents.** No edits, no server, no port, no install, no test run, no git writes, no HTTP requests.
+
+## Depth
+
+Derived from the changed-file list, with no judgement.
+
+| Depth    | When                                                                  | Shape                                                                |
+| -------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `scan`   | five or fewer product files, or only tests, docs, i18n and CI changed | one agent, no fan-out                                                |
+| `review` | **the default, everything else**                                      | one agent per shard, at most six, per [`PARTITION.md`](PARTITION.md) |
+| `siege`  | **only when the user asks for it by name**                            | `review` plus the adversarial machinery in [`SIEGE.md`](SIEGE.md)    |
+
+A product file is one not under `tests/`, `docs/`, `.github/`, `.husky/`, and not `*.md` or a translation catalogue.
+
+Never label a run deeper than the work it did. A `siege` that spawned no skeptic is a `review`.
+
+## Lenses
+
+Every reviewing agent reads [`LENSES.md`](LENSES.md) — the zone-lens table, the seams, the always-on checks and the risk signals that fix rank. The parent never applies a row itself. A path no zone claims is read directly and named in coverage.
+
+Hand each agent the file by absolute path. It lives on whichever branch the skill is installed on, which is **not** necessarily the branch under review — check it is readable from the working tree before briefing, and extract it to a temporary path if it is not.
+
+## Reading discipline
+
+In every brief.
+
+- **Read surrounding code, not only the diff.** In this repo the bug is usually in the caller.
+- **Anchored or unconfirmed.** Every finding is anchored at `path:line` and re-checked against real callers before it is reported.
+- **Claim-check the prose.** Every behaviour claim this diff adds to `README.md` or `CHANGELOG.md` is checked against the code that must implement it.
+- **Both sides of a wire.** A value crossing the socket is defined in the engine, serialised in `publicState()`, read in the client and rendered in the overlay.
+- **Self-reported is untrusted.** The browser tells the server its page, cursor and visibility.
+
+### Tooling hazards
+
+Say these in every brief; each has cost a run.
+
+- The shell is behind a token-reducing proxy that **silently truncates output**. Multi-file `grep` collapses to the first matching file. Use `/usr/bin/git`, grep one file at a time, read with `cat`/`sed -n`.
+- `node --test tests/unit/*.test.mjs` needs the shell to expand the glob.
+- Invoke eslint as `node ./node_modules/eslint/bin/eslint.js .` if the wrapper reports something that does not reproduce.
 
 ## The review folder
 
@@ -62,121 +102,128 @@ Binds the parent. Every rule here exists because breaking it is cheap and invisi
 .reviews/pr-<n>/<YYYY-MM-DD-HH:MM>/
 ```
 
-`<n>` is the PR number, or the branch name with `/` replaced by `-` when there is no PR. Local time, 24-hour. Resolve it **once, before anything is spawned** — shards write into it. A fresh folder per run; append `-2`, `-3` if the name is taken; never rename one.
+Resolve it once, before anything is spawned. `.reviews/` is gitignored. Each shard writes one satellite into it; the parent writes the overview beside them.
 
-`.reviews/` is gitignored: these are working notes, and this repo is a published package. Say in the closing summary where the folder is, so an unmentioned directory is not a surprise.
+## Rank, disposition, verdict
 
-**Absolute paths belong in briefs, never in artifacts.** Each subagent gets the absolute review-folder path so it can write; every path inside a written file is relative to the repo root.
+Rank is the heading: `correctness` → `security` → `breaking` → `structure` → `convention` → `test-docs`. **No High/Medium/Low — a severity word anywhere is a defect.**
 
-## Depth
+Disposition is blocking force, and it decides the verdict:
 
-Derived mechanically from the changed-file list, with no judgement, so the same diff always lands on the same depth. Each depth is the one above it plus one more kind of fan-out.
+| Disposition     | Means                                                         |
+| --------------- | ------------------------------------------------------------- |
+| `merge-blocker` | ships a broken install, a data loss, or a security regression |
+| `should-fix`    | real defect, worth a follow-up commit, does not block         |
+| `non-blocking`  | nit, polish, missing test, wording                            |
 
-| Depth    | Shape                                                                                                                                  | Read before spawning                                        |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `scan`   | one subagent, no fan-out — cheap triage                                                                                                | this file                                                   |
-| `review` | zone lenses through a partition fan-out, one satellite per shard                                                                       | [`PARTITION.md`](PARTITION.md)                              |
-| `siege`  | `review`, plus off-diff perspectives, full public-surface tracing, and an adversarial pass that alone may call a candidate `confirmed` | [`PARTITION.md`](PARTITION.md), then [`SIEGE.md`](SIEGE.md) |
+| Verdict          | Rule                                                    |
+| ---------------- | ------------------------------------------------------- |
+| **NO GO**        | one or more `merge-blocker`                             |
+| **GO WITH NITS** | no blockers, one or more `should-fix` or `non-blocking` |
+| **GO**           | nothing confirmed                                       |
 
-**Floor:**
-
-- `siege` when any changed path is owned by a consequence zone: `deletion-guard`, `realtime`, `plugin-surface`, `config`. These four decide whether a stranger can reach the plugin, whether the host process survives, and what a published version promises — each breaks expensively and quietly.
-- `review` when any product file changed (anything not under `tests/`, `docs/`, `.github/`, and not `*.md` or a translation catalogue).
-- `scan` otherwise.
-
-A user may ask for a different depth. Honour it, and record the override in coverage. **Never label a run deeper than the work it did** — a `siege` that spawned no skeptic is a `review`, and its depth line says so.
-
-## Lenses
-
-Every reviewing subagent reads [`LENSES.md`](LENSES.md) — the zone-lens table, the seams, the always-on checks and the risk signals that fix rank. The parent never applies a row itself; the brief names the file and the zone ids the subagent owns. A path no zone claims is read directly and named in coverage, never silently waived.
-
-## Reading discipline
-
-Binds every subagent, at every depth.
-
-- **Read surrounding code, not only the diff.** In this repo the bug is usually in the caller: the engine's state machine, the socket handler that calls it, and the overlay that renders it disagree about one value.
-- **Anchored or unconfirmed.** Every candidate is anchored at `path:line` and re-checked against real callers before it is called `confirmed` — by the finder at `scan` and `review`, by an independent skeptic at `siege`, where the finder's own re-check earns nothing.
-- **Claim-check the prose.** Every behaviour claim added to `README.md` or `CHANGELOG.md` by this diff is checked against the code that must implement it. A claim with no implementation ranks `test-docs`, or `correctness` when an operator would make a security decision on it.
-- **Both sides of a wire.** A value that crosses the socket is defined in `server/src/services/game.js`, serialised in `publicState()`, read in `admin/src/net/client.js` and rendered in the overlay. A finding that looked at one end has not finished.
-- **Self-reported is untrusted.** The browser tells the server its page, its cursor and its visibility. Any server behaviour keyed on those is reachable by a player with a console.
-
-### Tooling hazards in this environment
-
-Say these in every brief; they have each cost a run before.
-
-- The shell is behind a token-reducing proxy that **silently truncates output**. Multi-file `grep` collapses to the first matching file, and `git diff` gets cut. Use `/usr/bin/git` explicitly, grep one file at a time, and read a file with `cat`/`sed -n` rather than trusting a summarised search.
-- `node --test tests/unit/*.test.mjs` needs the shell to expand the glob; quoting it fails on Node 18.
-- Invoke eslint as `node ./node_modules/eslint/bin/eslint.js .` if the wrapper reports something that does not reproduce.
-
-## The scan pass
-
-One subagent, no fan-out. The parent briefs, then edits the result into the overview. Hand it: the diff range, the changed-file list with each file's zones, `LENSES.md`, the absolute review folder, and the lint/test facts.
-
-**Done when** every changed file is covered by a lens or waived with a concrete reason, and every surviving candidate carries an anchor plus a mechanism trace.
-
-## The review pass
-
-Same lenses, with fan-out. The parent partitions the changed files into zone shards, each shard reads its files through its zone's lens, writes a satellite, and returns control JSON. `PARTITION.md` holds the algorithm, the brief, the return contract and the overflow rule. The shard table is written down before anything is spawned.
-
-**Done when** every shard in the table returned or was re-split, every returned finding carries an anchor, every satellite named in a return exists on disk, and every changed path is covered, waived, or named as unreached.
-
-## The siege pass
-
-`review`'s shard table, plus what a partitioned lens pass cannot produce: intent reconstructed off-diff, every changed public symbol traced to its consumers, and an adversarial pass — prosecutor, defender, then skeptics. `SIEGE.md` holds the shape rule, each fan-out's trigger and return, the verdict that earns `confirmed`, and the budget that stops a run. **A candidate no skeptic tried to refute is not a finding.**
-
-**Done when** `review`'s condition holds, and: shape is recorded, every conditional fan-out ran or is named with the mechanical reason it did not, every candidate is `confirmed` by unanimous skeptics or listed under `## Refuted candidates`, and the satellite count is within `SATELLITE_CEILING`.
+A pre-existing defect the diff did not introduce is reported, never a blocker. A documentation defect blocks only when acting on the prose breaks something.
 
 ## The overview
 
-Write `pr-<n>-<depth>-overview.md` into the review folder, beside the satellites it links. Assembled by the parent from the shard table, the returned records and its own listing of the folder — never by pasting a shard's analysis in. No absolute paths.
+Write `pr-<n>-<depth>-overview.md` into the review folder. Assembled by the parent from the returned records, never by pasting a shard's analysis in. No absolute paths.
 
-Order: **verdict**, provenance, coverage, `## Findings`, `## Refuted candidates`, `## Open questions`, `## Leftovers`.
-
-The **verdict** is a bold one-liner stating what works before what blocks.
+Order: **verdict line**, provenance, coverage, `## Findings`, `## Refuted`, `## Open questions`.
 
 ```
+verdict: NO GO | GO WITH NITS | GO
 pr:      <number or branch>
 head:    <sha reviewed>
 base:    <baseRef>
-pushed:  <yes | no — local commits not on the PR: sha, sha>
-checks:  lint <pass|fail> · format <pass|fail> · unit <n pass/n fail> · live suites not run
+checks:  lint <pass|fail> · format <pass|fail> · unit <n/n> · live suites not run
+agents:  <n>
 ```
 
-**Coverage** carries: depth and any override, the shard table with each satellite as a relative link, the named constants in force, waived files with reasons, unreached files with reasons. At `scan` the shard table and constants are absent, which is what a scan looks like. At `siege` it also carries the shape and the candidate ledger.
-
-Findings are ranked by heading in this order: `correctness` → `security` → `breaking` → `structure` → `convention` → `test-docs`. Fixed keys, exactly this schema:
+Findings use these keys exactly:
 
 ```
-### F<n> — <correctness|security|breaking|structure|convention|test-docs> — <one-line claim>
-status:      confirmed
+### F<n> — <rank> — <one-line claim>
 disposition: merge-blocker | should-fix | non-blocking
 anchor:      <path:line>[, ...]
 trigger:     ...
 path:        ...
 expected:    ...
 actual:      ...
-runtime:     not-exercised (read-only review)
 fix:         ...
 ```
 
-Rules:
+Full blocks for blockers and `should-fix`; a one-row table for the nits. **Target 80–200 lines.** Depth belongs in the satellites.
 
-- Only `status: confirmed` findings appear under `## Findings`. Anything unproven moves to `## Refuted candidates` with the same block and the reason it did not survive.
-- **No `High`/`Medium`/`Low`.** Rank is the heading; blocking force is `disposition`. A severity word anywhere in the overview is a defect.
-- `anchor` needs at least one real `path:line`. `path` is the mechanism trace, `path:line` per step; the satellite holds the long form.
-- `runtime` is `not-exercised (read-only review)` unless a suite the parent ran actually exercises the finding, in which case name the suite and what it showed.
-- A finding that only reproduces in a browser says so in `runtime` — this repo has no browser harness, and pretending otherwise is how an untested fix ships looking verified.
+A finding that only reproduces in a browser says so — this repo has no browser harness, and pretending otherwise is how an untested fix ships looking verified.
 
-Target 120–300 lines at every depth. Depth belongs in satellites, never in a longer overview.
+## Posting
 
-## Stop for a human
+**The verdict goes on the PR.** A review that stops at a local file has not been delivered.
 
-Emit the overview, summarise the verdict and the merge-blockers in chat, name the review folder, and **stop**. Nothing here touches GitHub. Posting is a separate, explicit step — `pr-pending-review` in cms-brain stages comments as a GitHub pending review without submitting them.
+Draft the comment bodies in chat first and let the user react — wording and which findings survive are theirs to tune. Then post, in two steps.
 
-## Stub on abort
+**1. Inline comments**, one per actionable finding — blockers and `should-fix`. Nits go in the summary body as a list, not as twenty inline comments nobody will read. Build the payload as JSON with the Write tool (never a heredoc — it mangles markdown), and pass it with `--input`:
 
-A refused or aborted run still writes the overview file, carrying its status, the stop that caused it, and the concrete next step. A run with no overview is a run nobody can find.
+```jsonc
+// <review folder>/pending-review.json
+{
+  "commit_id": "<headRefOid>",
+  "comments": [
+    {
+      "path": "server/src/config/index.js",
+      "line": 120,
+      "side": "RIGHT",
+      "body": "**Lead claim in one bold line.**\n\nThe concrete failure.\n\nThe ask.\n\n_Posted by AI (Claude), on behalf of @<user>._",
+    },
+  ],
+}
+```
+
+```bash
+gh api --method POST repos/<owner>/<repo>/pulls/<n>/reviews --input <path> --jq '{id, state}'
+```
+
+Omitting `event` leaves it `PENDING`. Anchors must be lines **in the diff**; use `side: RIGHT` with the new-file line, `LEFT` with the old. For a finding whose anchor is not in the diff, use `subject_type: "file"` or move it to the summary.
+
+**2. The summary**, which submits the review:
+
+```bash
+gh api --method POST repos/<owner>/<repo>/pulls/<n>/reviews/<id>/events \
+  -f event=COMMENT -f body="$(cat <path-to-body>)"
+```
+
+**Always `event=COMMENT`.** Never `APPROVE`, never `REQUEST_CHANGES` — the verdict is stated in the body, and the merge decision stays a human's. Say so when reporting.
+
+Summary body shape:
+
+```markdown
+## NO GO
+
+One sentence saying what works before what blocks.
+
+**Blockers**
+
+1. **<claim>** — `path:line`. <one line>.
+
+**Should fix** — <n>, inline above.
+
+**Nits** — <n>: <comma-separated one-liners with anchors>.
+
+**Not verified:** lint/format/unit results, and what did not run.
+
+_Posted by AI (Claude), on behalf of @<user>._
+```
+
+Comment style: simple English, lead with the claim in one bold line, then the failure, then the ask. State confidence honestly — a design question is not a defect. Tie every comment to a real line. Skip praise and anything a bot already said.
+
+## After posting
+
+Report the verdict and the review URL in chat, then **ask what to fix**, offering three options: blockers only, blockers and nits, or nothing for now.
+
+On a yes, fix on the PR branch, run `npm run lint && npm run format:check && npm run test:unit && npm run build`, commit with the repo's conventional-commit style (scope from `server`, `admin`, `overlay`, `widget`, `i18n`, `game`, `tests`, `docs`, `deps`, `ci`), and push. Then reply in the threads that were fixed — one line each, naming the commit — rather than editing the original comments.
+
+**Do not fix and post in the same breath without asking.** The user may disagree with a finding, and arguing with it after it is fixed is more expensive than before.
 
 ## Done when
 
-The overview exists in `.reviews/pr-<n>/<iso>/`, with a bold verdict, a provenance block naming the sha it judged, every finding matching the schema keys exactly, every anchor a real `path:line`, no severity vocabulary, no absolute path, no GitHub write attempted — and every subagent it spawned was a fresh `general-purpose` agent briefed without the author's conclusions.
+The overview exists in `.reviews/pr-<n>/<iso>/` with a verdict line and every anchor a real `path:line`; the review is posted as a single `COMMENT` review carrying that verdict; the user has been told the URL and asked what to fix; and every agent spawned was a fresh `general-purpose` agent briefed without the author's conclusions.
