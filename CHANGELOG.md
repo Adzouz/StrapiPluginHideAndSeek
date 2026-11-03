@@ -18,9 +18,13 @@ four are overridable in `config/plugins.ts`; the old values are in brackets.
   at roughly half the speed it used to.
 - `catchRadius` is now **0.09** (was `0.06`). Catches land from half again as
   far away.
-- `pageQueryKeys` now defaults to **`['folder', 'folderPath']`** (was unset).
+- `pageQueryKeys` now behaves as **`['folder', 'folderPath']`** (was unset).
   Every Media Library folder is its own room. Previously everybody in the Media
-  Library shared one room regardless of the folder they had opened.
+  Library shared one room regardless of the folder they had opened. The literal
+  default is `null`, and the list is applied where it is read: Strapi merges
+  plugin config with lodash `defaultsDeep`, which recurses into arrays
+  index-wise, so a real array default could not be shortened or replaced —
+  `['plugins']` would have merged to `['plugins', 'folderPath']`.
 
 Together these make hiders markedly easier to catch. Set all four back to the
 old values for 0.2.0's feel.
@@ -114,9 +118,39 @@ old values for 0.2.0's feel.
   frame is marked sent only once it has been sent.
 - **A player with no page is no longer scored as having sat in the safe zone**
   on projects whose admin is mounted at `/`.
-- **`roundSeconds` is capped on the config path too**, not only from the lobby.
+- **Every phase is bounded on the config path too**, not only from the lobby.
   An unbounded round kept admin sessions open and the deletion guards armed for
-  as long as it lasted.
+  as long as it lasted; a fractional `tickHz` kept them armed past the end of
+  the round, because `tick()` is what ends it.
+- **A round length of zero can no longer be set from the lobby.**
+  `{ roundSeconds: 0.5 }` passed the positivity check, floored to 0 and gave a
+  round that finished on the tick it began. Any connected socket could send it.
+- **The deletion guards match case-insensitively.** `@koa/router` compiles
+  Strapi's routes with the `i` flag and authorises off the matched route, so
+  `DELETE /ADMIN/USERS/7` was routed, authorised and executed while the guard,
+  reading the raw path, saw nothing.
+- **One null socket payload no longer exits the host Strapi.**
+  `socket.emit('page', null)` made `payload.path` a TypeError inside socket.io's
+  bare `process.nextTick`, with no handler anywhere to catch it.
+- **A player who never readied up is no longer shown the round.** Being dealt no
+  role leaves them a spectator by role alone, which handed them a follow roster
+  and live positions for every uncaught hider on their page — in manhunt, the
+  whole game.
+- **A hider who never reported a page is no longer scored as a survivor.**
+- **A manhunt that loses its hunters before the hunt opens is abandoned** rather
+  than reported as the prey escaping after 0:00.
+- **The ticket endpoint returns the same admin root the engine scores against.**
+  It read `admin.path`, which has the part it shares with `server.url` stripped
+  out, so on a project served under a sub-path the client's "go home" navigated
+  to a URL the admin is not served at.
+- **A superseded tab stops renewing its admin session**, and its lobby widget
+  says the game moved rather than claiming the game server is unreachable.
+- **A dropped tab that can no longer reconnect stops polling `ping`.** It would
+  otherwise renew that admin's session every minute for the life of the tab.
+- **A player released early from a lockdown re-announces where they are.** The
+  client caches the page it last reported before the server acknowledges it, so
+  a player who navigated while locked stayed in a room they had left —
+  invisible where they were, catchable where they were not.
 - The content-entry guard now works on projects that mount the admin somewhere
   other than `/admin`.
 - A throw inside the game loop is logged instead of taking the host Strapi
@@ -132,6 +166,16 @@ old values for 0.2.0's feel.
 - `mode` and `preyId` joined the settings the lobby can change between rounds.
 - `mode`, `preyEscapesLockdown` and `corsOrigin` are now validated at boot.
   `preyEscapesLockdown: 'false'` used to turn the exemption on.
+- **Out-of-range config numbers are clamped at boot, not rejected.** A thrown
+  validation error is rethrown by Strapi's plugin loader and exits the CMS, so
+  a ceiling that throws turns a working install into one that will not start.
+  `countdownSeconds`, `hideSeconds`, `roundSeconds`, `seekerCount` and `tickHz`
+  are brought into range and floored to whole numbers, `forfeitAfterMs` is
+  capped at 300000, and each repair logs one warning naming the value used. The
+  full table is in the README. Wrong _types_ still throw.
+- `corsOrigin` accepts a `RegExp`, on its own or inside the array — socket.io
+  has always handled one, and Strapi stores plugin config without a clone or a
+  JSON round-trip, so one written in `config/plugins.ts` arrives intact.
 - `@strapi/sdk-plugin` is no longer a peer dependency, so installing this
   package no longer pulls Vite and Rollup into your project.
 
