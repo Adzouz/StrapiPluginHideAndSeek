@@ -73,25 +73,29 @@ const setup = ({ strapi }) => {
     socket.emit('hello', { playerId: player.id, state: game.publicState() });
     sendLeaderboard(socket);
 
-    socket.on('page', (payload = {}) => {
-      game.setPage(player.id, payload.path);
-    });
+    /**
+     * `(payload = {})` defaults on `undefined` and nothing else, so one
+     * `socket.emit('page', null)` from any authenticated admin's console makes
+     * `payload.path` a TypeError. socket.io dispatches listeners inside a bare
+     * `process.nextTick`, its only try/catch is around the decoder, and neither
+     * Strapi nor this plugin registers an `uncaughtException` handler — so the
+     * throw takes the whole CMS down. Every payload handler goes through here.
+     */
+    const onPayload = (event, handler) => {
+      socket.on(event, (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
 
-    socket.on('cursor', (payload = {}) => {
-      game.setCursor(player.id, payload.x, payload.y);
-    });
+        handler(payload);
+      });
+    };
 
-    socket.on('away', (payload = {}) => {
-      game.setAway(player.id, payload.away);
-    });
-
-    socket.on('ready', (payload = {}) => {
-      game.setReady(player.id, payload.ready);
-    });
-
-    socket.on('settings', (payload = {}) => {
-      game.updateSettings(payload);
-    });
+    onPayload('page', (payload) => game.setPage(player.id, payload.path));
+    onPayload('cursor', (payload) => game.setCursor(player.id, payload.x, payload.y));
+    onPayload('away', (payload) => game.setAway(player.id, payload.away));
+    onPayload('ready', (payload) => game.setReady(player.id, payload.ready));
+    onPayload('settings', (payload) => game.updateSettings(payload));
 
     socket.on('start', (_payload, ack) => {
       const result = game.start();

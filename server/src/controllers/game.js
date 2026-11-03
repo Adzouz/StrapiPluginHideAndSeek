@@ -34,8 +34,11 @@ module.exports = ({ strapi }) => ({
       expiresIn,
       socketPath: SOCKET_PATH,
       // Where the admin panel is mounted, so the client can send everyone
-      // back to the homepage when a round ends.
-      adminPath: strapi.config.get('admin.path', '/admin'),
+      // back to the homepage when a round ends. The game service owns this:
+      // `admin.path` has the part it shares with `server.url` stripped out, so
+      // a project served under `/cms` reports `/admin` while the browser is on
+      // `/cms/admin` — and `goHome()` then navigates to a path that 404s.
+      adminPath: strapi.plugin(PLUGIN_ID).service('game').adminRoot(),
       state: strapi.plugin(PLUGIN_ID).service('game').publicState(),
     };
   },

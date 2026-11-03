@@ -2,14 +2,21 @@
 
 const { PLUGIN_ID } = require('../constants');
 
-const ONE_USER = /^\/admin\/users\/([^/]+)\/?$/;
-const BATCH_DELETE = /^\/admin\/users\/batch-delete\/?$/;
+// Case-insensitive, every one of them. `@koa/router` defaults `sensitive` to
+// false and Strapi never overrides it, so every route in the admin compiles
+// with the `/i` flag and authorises off `ctx.state.route` — meaning
+// `DELETE /ADMIN/USERS/7` is routed, authorised and executed while a matcher
+// reading raw `ctx.path` sees nothing. Same class of hole as the one
+// `decodeSegment` closes, on a different axis. Captures keep the input's own
+// case, so model uids and document ids are unaffected.
+const ONE_USER = /^\/admin\/users\/([^/]+)\/?$/i;
+const BATCH_DELETE = /^\/admin\/users\/batch-delete\/?$/i;
 
-const ONE_ENTRY = /^\/content-manager\/collection-types\/([^/]+)\/([^/]+)\/?$/;
-const BULK_ENTRIES = /^\/content-manager\/collection-types\/([^/]+)\/actions\/bulkDelete\/?$/;
-const SINGLE_TYPE = /^\/content-manager\/single-types\/([^/]+)\/?$/;
+const ONE_ENTRY = /^\/content-manager\/collection-types\/([^/]+)\/([^/]+)\/?$/i;
+const BULK_ENTRIES = /^\/content-manager\/collection-types\/([^/]+)\/actions\/bulkDelete\/?$/i;
+const SINGLE_TYPE = /^\/content-manager\/single-types\/([^/]+)\/?$/i;
 
-const UPLOAD_BULK_DELETE = /^\/upload\/actions\/bulk-delete\/?$/;
+const UPLOAD_BULK_DELETE = /^\/upload\/actions\/bulk-delete\/?$/i;
 
 /** Where the upload plugin keeps its folders, for resolving a delete's subtree. */
 const FOLDER_UID = 'plugin::upload.folder';
@@ -32,8 +39,10 @@ const decodeSegment = (value) => {
 };
 
 /**
- * Nothing here has been authenticated yet — see `protectPlayers` — so the
- * refusal says only that somebody is in the way, never who or where.
+ * The refusal says only that somebody is in the way, never who. The caller has
+ * been authenticated by the time this is reached, but they are still not
+ * entitled to the roster: knowing an account exists is not knowing it is
+ * playing, and a count is the most the message needs.
  */
 const refuse = (ctx, message, action) => {
   ctx.status = 409;
@@ -152,16 +161,55 @@ const resolveFolders = async (strapi, folderIds) => {
   }
 };
 
+const BEARER = /^bearer\s+(\S+)$/i;
+
 /**
- * A request carrying no bearer token at all. Strapi composes authentication
- * per route, inside the router — and the router is only mounted at `listen()`,
- * long after a plugin's `bootstrap()` has run. So this middleware sits ahead of
- * every auth check there is, and a 409 here would answer an anonymous caller
- * that a 401 was about to turn away. Let those through untouched: they are
- * going to be refused by Strapi itself a moment later, and nothing about the
- * round is any of their business in the meantime.
+ * Whether this request carries a live admin session.
+ *
+ * It has to be asked here, by hand. Strapi composes authentication per route,
+ * inside the router, and the router is only mounted at `listen()` — long after
+ * a plugin's `bootstrap()` has run. So this middleware sits ahead of every auth
+ * check there is, and a 409 from it would answer a caller that a 401 was about
+ * to turn away: an unauthenticated oracle for whether a given entry, single
+ * type or folder currently has somebody standing on it.
+ *
+ * Testing the *shape* of the header is not enough — `Bearer x` has the shape.
+ * The token is verified and its session checked against the store, so only a
+ * caller who could have made the request anyway learns anything from the
+ * refusal. Note that moving this to `strapi.server.api('admin').use()` would
+ * not help: router-level middleware still runs before the layer's policies, so
+ * `ctx.state.user` is unset there too.
+ *
+ * On a Strapi old enough to have no session manager the header shape is all
+ * there is; the guard keeps working, and the oracle is no worse than it was.
  */
-const unauthenticated = (ctx) => !/^bearer\s+\S+$/i.test(ctx.request.header.authorization ?? '');
+const authenticated = async (strapi, ctx) => {
+  const match = BEARER.exec(ctx.request.header.authorization ?? '');
+
+  if (!match) {
+    return false;
+  }
+
+  if (typeof strapi.sessionManager !== 'function') {
+    return true;
+  }
+
+  try {
+    const sessions = strapi.sessionManager('admin');
+    const { isValid, payload } = sessions.validateAccessToken(match[1]);
+
+    if (!isValid || !payload?.sessionId) {
+      return false;
+    }
+
+    return await sessions.isSessionActive(payload.sessionId);
+  } catch {
+    // An unknown origin or an unreachable session store. Treat it as not
+    // authenticated: the cost is that a delete goes through mid-round, which
+    // is the behaviour without this plugin at all.
+    return false;
+  }
+};
 
 /**
  * Refuses to delete or deactivate an admin user who is in the middle of a round,
@@ -173,19 +221,22 @@ const unauthenticated = (ctx) => !/^bearer\s+\S+$/i.test(ctx.request.header.auth
  */
 const protectPlayers = ({ strapi }) => {
   strapi.server.use(async (ctx, next) => {
-    if (unauthenticated(ctx)) {
-      await next();
-
-      return;
-    }
-
     const entry = entryTargetsFor(ctx);
     const folderIds = folderTargetsFor(ctx);
     const target = targetsFor(ctx);
 
     // This runs in front of every request the app serves, so the common case —
-    // which is all of them — gets out before looking anything up.
+    // which is all of them — gets out before looking anything up. Matching is
+    // pure string work and discloses nothing, which is why it comes first: the
+    // session check below costs a store lookup, and only the handful of
+    // delete-shaped requests should pay for it.
     if (!entry && !folderIds && (!target || target.ids.length === 0)) {
+      await next();
+
+      return;
+    }
+
+    if (!(await authenticated(strapi, ctx))) {
       await next();
 
       return;
