@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Runde vorbei",
   "hide-and-seek.error.notEnoughPlayers": "Mindestens 2 bereite Spieler nötig",
   "hide-and-seek.error.roundRunning": "Es läuft bereits eine Runde",
+  "hide-and-seek.error.preyNotReady": "Die gejagte Person ist nicht bereit",
   "hide-and-seek.leaderboard.empty": "Noch keine Runde gespielt. Gewinne eine, dann gehört die Liste dir.",
   "hide-and-seek.leaderboard.players": "{count} Spieler insgesamt",
   "hide-and-seek.leaderboard.points": "Punkte",
@@ -72,5 +73,16 @@
   "hide-and-seek.overlay.followPrev": "Vorheriger Spieler",
   "hide-and-seek.overlay.followNext": "Nächster Spieler",
   "hide-and-seek.overlay.you": "Du",
-  "hide-and-seek.toast.external": "Nicht während des Spiels."
+  "hide-and-seek.toast.external": "Nicht während des Spiels.",
+  "hide-and-seek.toast.superseded": "Das Spiel läuft jetzt in deinem anderen Tab. Klicke hier, um es zurückzuholen.",
+  "hide-and-seek.lobby.mode": "Modus",
+  "hide-and-seek.lobby.modeClassic": "Verstecken",
+  "hide-and-seek.lobby.modeManhunt": "Hetzjagd",
+  "hide-and-seek.lobby.prey": "Gejagt",
+  "hide-and-seek.lobby.preyRandom": "zufällig",
+  "hide-and-seek.overlay.youArePrey": "Du bist die Beute — lauf",
+  "hide-and-seek.overlay.huntTarget": "Jagt {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} hat {time} durchgehalten",
+  "hide-and-seek.overlay.preyEscaped": "{name} ist nach {time} entkommen",
+  "hide-and-seek.overlay.preyLeft": "{name} hat die Jagd verlassen"
 }

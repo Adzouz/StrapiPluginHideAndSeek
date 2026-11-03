@@ -87,8 +87,9 @@ they end on _is_ their hiding spot.
 
 **4. Hunting.** The seeker browses the admin looking for company. The moment a
 seeker and a hider share a page they see each other at once, and **both are
-locked in**: links stop working for a few seconds, so the hider has to dodge
-rather than click away. The hider is also **slowed** — their marker chases their
+locked in**: links stop working for `lockdownMs` — fifteen seconds by default —
+so the hider has to dodge rather than click away. The hider is also **slowed** —
+their marker chases their
 real cursor at a capped speed instead of being it, so flicking the mouse across
 the screen buys distance over time rather than instantly. The seeker catches them
 by holding their own cursor on the marker for a beat.
@@ -102,6 +103,49 @@ round starts only when people opt into it again — and the lobby widget goes
 straight back to being the lobby, ready to deal a new round while the last
 result is still on screen. Closing the results card takes you back to the
 homepage, and only you: it does not end anybody else's round.
+
+### Where you are
+
+A hiding spot is the admin route you are on — but some screens keep their
+location in the query string rather than the path. The Media Library is the
+obvious one: every folder is the same pathname with a different `folder`
+parameter, so without help everybody in the Media Library would share one room
+regardless of the folder they opened. `pageQueryKeys` lists the parameters that
+count. Filters, sort and pagination are left out on purpose: two people looking
+at the same list through different filters are still in the same place, and
+treating those as separate rooms would make anyone unfindable.
+
+**One tab per player.** Opening the admin in a second tab hands the game to the
+newest tab and disconnects the older one, which is told why. With two tabs live
+they would both report a page, the server would keep whichever spoke last, and
+you would end up standing wherever your other tab happened to be — including on
+pages you had already left or deleted.
+
+This applies to any two admin tabs open under the same account, in every phase,
+whether or not a round is running: the rule has to hold before a round starts or
+the second tab is still there when one does. The older tab says so and takes the
+game back the moment you click in it.
+
+### Manhunt
+
+Set **Mode** to _manhunt_ in the lobby and pick who everybody is after. That
+player is the only hider; every other player is a seeker. The round ends the
+moment they are caught — or they win by lasting the whole clock, and the result
+card leads with how long they survived.
+
+Two rules change, because the classic ones make a manhunt unplayable:
+
+- **The prey is never locked in.** Frozen in a room with a dozen hunters is an
+  instant catch, so they can always run. The hunters are still locked by the
+  encounter, which is what stops the swarm from simply taking turns — but their
+  lock lifts the moment the prey leaves, or the prey could pin every hunter on
+  an empty page and stroll around unopposed. Set `preyEscapesLockdown: false`
+  if you want it brutal.
+- **There is no safe zone.** Otherwise the prey stands on the homepage and runs
+  out the clock.
+
+They are still slowed while a hunter shares their page, so they can flee a room
+but not dance around it.
 
 ### The safe zone
 
@@ -181,10 +225,16 @@ delete that row to wipe the board.
   admin does not cost you the game.
 - **No removing the players.** While a round is on, the admin API refuses to
   delete an admin user who is in it — single or batch — or to deactivate them,
-  answering 409 and naming who is playing. The lobby is built out of admin users,
-  so removing one mid-game strands everyone waiting on a player who no longer
-  exists. Everything else still works: renaming a player, editing their roles,
-  and deleting or deactivating anyone not in the round.
+  answering 409. The lobby is built out of admin users, so removing one mid-game
+  strands everyone waiting on a player who no longer exists. Everything else
+  still works: renaming a player, editing their roles, and deleting or
+  deactivating anyone not in the round.
+- **No deleting the room somebody is in.** The same 409 covers deleting a
+  content entry or a Media Library folder a player is standing on — single
+  delete, bulk delete, and a folder's whole subtree. The deletion would succeed
+  on the server while their tab kept showing the old page, leaving them at an
+  address nobody else can reach. See [What a 409 means for your
+  API](#what-a-409-means-for-your-api).
 - **No hollow rounds.** If every seeker leaves, the round ends there and then and
   the hiders win — nobody is left to find them. The same goes the other way: if
   the last hider walks out, the seekers have found everyone there is to find.
@@ -202,43 +252,129 @@ export default {
     enabled: true,
     config: {
       hideSeconds: 10,
-      lockdownMs: 4000,
+      lockdownMs: 15000,
       caughtBecome: 'seeker',
     },
   },
 };
 ```
 
-| Option             | Default    | What it does                                                                                                           |
-| ------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `countdownSeconds` | `3`        | "3… 2… 1…" before roles are revealed.                                                                                  |
-| `hideSeconds`      | `10`       | Time to scatter while the seeker is blindfolded.                                                                       |
-| `roundSeconds`     | `600`      | Hard time limit. Hiders still free at 0:00 win.                                                                        |
-| `graceMs`          | `0`        | How long a hider stays invisible after a seeker arrives. Off by default: the lockdown already gives them their chance. |
-| `hiderSpeedLimit`  | `0.55`     | Top speed of a cornered hider's marker, in viewport widths per second. `0` disables the slowdown.                      |
-| `safeZone`         | `true`     | Whether the admin homepage is neutral ground.                                                                          |
-| `hintAfterMs`      | `45000`    | How long a seeker goes without a sighting before being nudged.                                                         |
-| `hintRepeatMs`     | `20000`    | How often the nudge picks a fresh target.                                                                              |
-| `lockdownMs`       | `4000`     | How long a shared page locks both players in place.                                                                    |
-| `catchRadius`      | `0.06`     | Catch distance, as a fraction of the viewport.                                                                         |
-| `catchHoldMs`      | `800`      | How long the seeker must hold the cursor to catch.                                                                     |
-| `idleRevealMs`     | `2000`     | A motionless hider is revealed after this.                                                                             |
-| `caughtBecome`     | `'seeker'` | `'seeker'` for tag-team, or `'spectator'`.                                                                             |
-| `seekerCount`      | `1`        | Seekers drawn at the start of a round.                                                                                 |
-| `forfeitAfterMs`   | `20000`    | A disconnected hider forfeits after this.                                                                              |
-| `tickHz`           | `20`       | Server tick and position broadcast rate.                                                                               |
-| `corsOrigin`       | `true`     | socket.io CORS origin. `true` reflects the request origin.                                                             |
+| Option                | Default     | What it does                                                                                                                           |
+| --------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `countdownSeconds`    | `3`         | "3… 2… 1…" before roles are revealed.                                                                                                  |
+| `hideSeconds`         | `10`        | Time to scatter while the seeker is blindfolded.                                                                                       |
+| `roundSeconds`        | `600`       | Hard time limit. Hiders still free at 0:00 win.                                                                                        |
+| `graceMs`             | `0`         | How long a hider stays invisible after a seeker arrives. Off by default: the lockdown already gives them their chance.                 |
+| `hiderSpeedLimit`     | `0.3`       | Top speed of a cornered hider's marker, in viewport widths per second. `0` disables the slowdown.                                      |
+| `safeZone`            | `true`      | Whether the admin homepage is neutral ground.                                                                                          |
+| `pageQueryKeys`       | `null`      | Query parameters that count as part of _where you are_; `null` means `['folder', 'folderPath']`. Filters and sort deliberately do not. |
+| `hintAfterMs`         | `45000`     | How long a seeker goes without a sighting before being nudged.                                                                         |
+| `hintRepeatMs`        | `20000`     | How often the nudge picks a fresh target.                                                                                              |
+| `lockdownMs`          | `15000`     | How long a shared page locks both players in place.                                                                                    |
+| `catchRadius`         | `0.09`      | Catch distance, as a fraction of the viewport.                                                                                         |
+| `catchHoldMs`         | `800`       | How long the seeker must hold the cursor to catch.                                                                                     |
+| `idleRevealMs`        | `2000`      | A motionless hider is revealed after this.                                                                                             |
+| `caughtBecome`        | `'seeker'`  | `'seeker'` for tag-team, or `'spectator'`.                                                                                             |
+| `seekerCount`         | `1`         | Seekers drawn at the start of a round.                                                                                                 |
+| `mode`                | `'classic'` | `'classic'` deals seekers against the rest; `'manhunt'` puts one named player against the whole room.                                  |
+| `preyId`              | `null`      | Manhunt only: who is hunted. Null draws at random; naming somebody who is not ready is a start error.                                  |
+| `preyEscapesLockdown` | `true`      | Manhunt only: whether the prey is exempt from the lockdown.                                                                            |
+| `forfeitAfterMs`      | `20000`     | A disconnected hider forfeits after this. Capped at 300000.                                                                            |
+| `tickHz`              | `20`        | Server tick and position broadcast rate.                                                                                               |
+| `corsOrigin`          | `true`      | socket.io CORS origin. `true` reflects the request origin.                                                                             |
 
-`caughtBecome`, `hideSeconds`, `roundSeconds` and `seekerCount` can also be
-changed from the lobby widget between rounds, without a restart.
+`mode`, `preyId`, `caughtBecome`, `hideSeconds`, `roundSeconds` and
+`seekerCount` can also be changed from the lobby widget between rounds, without
+a restart. A lobby change lasts until the server restarts; the configured value
+is what it starts from.
+
+#### What is capped, and what happens when you exceed it
+
+A round holds admin sessions open and keeps the deletion guards below armed for
+as long as it lasts, so an eleven-day round is not a setting, it is an outage.
+Every phase therefore has a ceiling, and the durations have a floor of one —
+`Math.floor(0.5)` is a round that ends on the tick it begins.
+
+| Key                | Floor | Ceiling |
+| ------------------ | ----- | ------- |
+| `countdownSeconds` | 1     | 60      |
+| `hideSeconds`      | 1     | 120     |
+| `roundSeconds`     | 1     | 3600    |
+| `seekerCount`      | 1     | 50      |
+| `tickHz`           | 1     | 60      |
+| `forfeitAfterMs`   | —     | 300000  |
+
+Out-of-range numbers are **clamped, not rejected**, on both paths — in
+`config/plugins.ts` as well as from the lobby. A thrown error here would be
+rethrown by Strapi's plugin loader and exit the whole CMS, which is a steep
+price for a number the game can simply bring into range. The config path logs
+one warning per key naming the value it used; the lobby path is silent, because
+its controls cannot produce an out-of-range value in the first place. The five
+whole-number keys are floored the same way.
+
+Wrong _types_ still throw, because there is nothing to fall back to: a string
+where a number belongs, `preyEscapesLockdown: 'false'`, an unknown `mode`, a
+`catchRadius` above 1, a negative duration.
 
 ### Tuning the feel
 
 Two numbers decide whether a standoff is winnable. `lockdownMs` is how long the
 hider is stuck in the room, and `hiderSpeedLimit` is how far they can travel
-while they are. At the defaults a cornered hider can cross about two screens in the 4 seconds
-they are frozen — enough to dodge a slow seeker, not enough to walk away. Raise
-the speed limit for slippery hiders, lower it for a bloodbath.
+while they are. At the defaults a cornered hider is frozen for 15 seconds and can only drift at
+0.3 screens per second, against a catch radius of 0.09 — a standoff the seeker
+should usually win. Earlier defaults (4s, 0.55, 0.06) made hiders very hard to
+catch. Raise `hiderSpeedLimit` and lower `lockdownMs` for slippery hiders; the
+three numbers are the whole difficulty dial.
+
+## What a 409 means for your API
+
+This is the most invasive thing the plugin does to the app it is installed in,
+so it is worth knowing before you install it. While a round is running —
+`countdown`, `hiding` or `hunting`, never otherwise — a middleware ahead of
+Strapi's router answers **409 `HideAndSeekRoundInProgress`** to:
+
+| Request                                                            | Refused when                                               |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `DELETE /admin/users/:id`, `POST /admin/users/batch-delete`        | one of those users is dealt into the round                 |
+| `PUT /admin/users/:id` with `isActive: false`                      | the same                                                   |
+| `DELETE /content-manager/collection-types/:model/:id`              | a player is standing on that entry's page                  |
+| `POST /content-manager/collection-types/:model/actions/bulkDelete` | a player is standing on one of those entries               |
+| `DELETE /content-manager/single-types/:model`                      | a player is standing on that single type's page            |
+| `POST /upload/actions/bulk-delete` with `folderIds`                | a player is standing in one of those folders, or below one |
+
+The refusal says only that somebody is in the way — a count, never a name or an
+id. The guard runs as a Koa middleware mounted in `bootstrap()`, which is before
+Strapi's router exists, so it authenticates the caller itself: the bearer token
+is verified against the admin session store, and a request that fails is passed
+straight through to the 401 it was going to get. Nothing is disclosed to a
+caller who could not have made the request anyway.
+
+Where somebody is standing is **self-reported**. The page a player occupies is
+whatever their browser emitted over the socket; the server has no independent
+view of it. Being dealt into the round is the bar, and that is a participation
+bar rather than a privilege one — a player who crafts a `page` message can hold
+a 409 over an entry, single type or folder they have never opened, for the rest
+of the round. They cannot read it, change it or learn anything about it; they
+can only refuse its deletion, and ending the round clears that.
+
+What is **not** guarded, so nobody plans around a guarantee that is not there:
+
+- the REST content API — the matchers cover `/admin`, `/content-manager` and
+  `/upload` paths only, and a `DELETE /api/...` goes straight through
+- anything that never reaches Koa: lifecycle hooks, cron jobs, seed scripts,
+  `strapi console`, data-transfer imports. No `strapi.server.use()` middleware
+  can see these, and no retry will help them — they will not get a 409 to retry
+- deleting a content type outright (Content-Type Builder)
+- **moving** or renaming a folder
+- `DELETE /i18n/locales/:id`, which cascades a `deleteMany` across every
+  localized model and so can delete a document out from under its occupant
+
+Everything else is untouched — creating, reading, updating, publishing, deleting
+anything nobody is standing on, and every deletion at all once the round is over.
+If a 409 is ever unwelcome, end the round from the lobby widget's **Abort round**
+button, which any player can press, or take the plugin out of `config/plugins.ts`.
+HTTP integrations that delete content on a schedule are the thing to think about:
+give them a retry, or do not play while they run.
 
 ## How it works
 
@@ -262,6 +398,39 @@ the speed limit for slippery hiders, lower it for a bloodbath.
   navigation. Cursor positions are written straight to the DOM from an animation
   frame rather than through React state; 20Hz of coordinates should not re-render
   the panel.
+
+## Long rounds and admin sessions
+
+Strapi ends an idle admin session, and a hider who has found a good spot stops
+clicking entirely — a socket carries no HTTP activity, so they used to be logged
+out mid-round. While a round is running the plugin polls an authenticated
+endpoint once a minute, which keeps the admin's token refreshed on its own
+schedule.
+
+On **Strapi 5.24 or later** you can also widen the window in `config/admin.ts`.
+The `auth.sessions` block does not exist before 5.24 — on an older host these
+keys are read by nobody, and the poll above is the whole of what keeps a round
+alive. The values are **seconds**, not milliseconds:
+
+```ts
+auth: {
+  sessions: {
+    idleSessionLifespan: 60 * 60, // 1 hour; and idleRefreshTokenLifespan
+    maxSessionLifespan: 8 * 60 * 60, // 8 hours; and maxRefreshTokenLifespan
+  },
+},
+```
+
+Logging out on purpose is still allowed, and now simply takes you out of the
+round — see the leaving rules above.
+
+Note for operators: while a round runs the plugin deliberately keeps the admin
+session from going idle — a tab in a round polls `GET /hide-and-seek/ping`, an
+authenticated endpoint that does nothing but let the admin's fetch client
+refresh the token, once a minute. It stops when the round ends, when the tab
+hands the game to another one, and when the tab's socket is gone past the point
+where it could reconnect. If your security posture depends on short idle
+sessions, turn the game off outside the times you want it played.
 
 ## Known limitations
 
@@ -335,6 +504,16 @@ that installing this package somewhere without git does not fail.
 
 ## Tests
 
+`npm run test:unit` is the only suite that needs nothing running. It drives the
+game engine directly with a stub Strapi and no clock to wait out, and covers the
+rules that are hard to reach from the outside: the settings ceilings, what a
+catch does to the seeker's lockdown, reloading mid-standoff, the manhunt draw,
+the page ids the server refuses to store, and both deletion guards — including a
+project that mounts the admin somewhere other than `/admin`.
+
+Everything below plays against a real Strapi, with real admin users and real
+sockets. Point them at a scratch project.
+
 `tests/e2e.mjs` plays a full headless round against a running Strapi: it logs two
 admin users in, takes tickets, connects both sockets and asserts that roles stay
 secret during the countdown, that both sides see each other the moment they share
@@ -352,11 +531,20 @@ logging out gives it up at once, a player who never comes back is swept, and
 leaving mid-round drops you from it — including the case where the last seeker
 walks out and the round ends on the spot.
 
-`tests/deletion.mjs` checks the guard that stops an admin user being deleted or
-deactivated out of a running round — and that it gets out of the way in the lobby, for
-non-players, and once the round is over. Every account it deletes is one it
+`tests/deletion.mjs` checks the guards that stop an admin user being deleted or
+deactivated out of a running round, and an entry or a Media Library folder being
+deleted out from under a player standing in it — that they get out of the way in
+the lobby, for non-players, for an unoccupied room and once the round is over,
+and that they tell an unauthenticated caller nothing. Every account it deletes is one it
 created for the purpose, so it leaves your test users alone; still, point it at a
 scratch project rather than anything you care about.
+
+`tests/manhunt.mjs` covers the whole-room mode: role dealing, the two exemptions
+that keep it playable, and the survival time on the result.
+
+`tests/tabs.mjs` covers the two ways a player's position could drift from where
+they actually are: a second tab taking over, and screens that keep their location
+in the query string.
 
 `tests/spectator.mjs` needs three players and covers what happens after a catch:
 the follow roster, the one-way visibility between spectators and players, and the
@@ -373,6 +561,8 @@ HNS_URL=http://127.0.0.1:1337 npm run test:mechanics
 HNS_URL=http://127.0.0.1:1337 npm run test:spectator
 HNS_URL=http://127.0.0.1:1337 npm run test:disconnect
 HNS_URL=http://127.0.0.1:1337 npm run test:deletion
+HNS_URL=http://127.0.0.1:1337 npm run test:tabs
+HNS_URL=http://127.0.0.1:1337 npm run test:manhunt
 ```
 
 The suites can be run back to back: `tests/helpers.mjs` caches admin tokens in

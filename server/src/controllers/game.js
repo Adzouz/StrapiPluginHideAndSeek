@@ -4,6 +4,19 @@ const { PLUGIN_ID, SOCKET_PATH } = require('../constants');
 
 module.exports = ({ strapi }) => ({
   /**
+   * Does nothing, on purpose. The client polls it during a round so the admin's
+   * fetch client keeps the session from going idle — pinging `ticket` for that
+   * would mint a socket credential every minute as a side effect.
+   */
+  ping(ctx) {
+    if (!ctx.state.user) {
+      return ctx.unauthorized();
+    }
+
+    ctx.status = 204;
+  },
+
+  /**
    * Hands the logged-in admin a one-shot ticket for the socket handshake.
    * Authentication is whatever the admin API already enforces on this route.
    */
@@ -21,8 +34,11 @@ module.exports = ({ strapi }) => ({
       expiresIn,
       socketPath: SOCKET_PATH,
       // Where the admin panel is mounted, so the client can send everyone
-      // back to the homepage when a round ends.
-      adminPath: strapi.config.get('admin.path', '/admin'),
+      // back to the homepage when a round ends. The game service owns this:
+      // `admin.path` has the part it shares with `server.url` stripped out, so
+      // a project served under `/cms` reports `/admin` while the browser is on
+      // `/cms/admin` — and `goHome()` then navigates to a path that 404s.
+      adminPath: strapi.plugin(PLUGIN_ID).service('game').adminRoot(),
       state: strapi.plugin(PLUGIN_ID).service('game').publicState(),
     };
   },

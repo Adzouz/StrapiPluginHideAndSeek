@@ -37,6 +37,11 @@ let state = {
   resultsDismissed: false,
   /** Transient banner: `{ id, kind, text }`. */
   toast: null,
+  /**
+   * This tab handed the game to another one. Distinct from `connected: false`:
+   * there is nothing wrong with the server, and nothing here is retrying.
+   */
+  superseded: false,
   muted: readMuted(),
 };
 

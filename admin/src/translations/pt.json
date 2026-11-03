@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Ronda terminada",
   "hide-and-seek.error.notEnoughPlayers": "São precisos pelo menos 2 jogadores prontos",
   "hide-and-seek.error.roundRunning": "Já está uma ronda a decorrer",
+  "hide-and-seek.error.preyNotReady": "O jogador caçado não está pronto",
   "hide-and-seek.leaderboard.empty": "Ainda não se jogou nenhuma ronda. Ganha uma e a tabela é tua.",
   "hide-and-seek.leaderboard.players": "{count} jogadores no total",
   "hide-and-seek.leaderboard.points": "pontos",
@@ -72,5 +73,16 @@
   "hide-and-seek.overlay.followPrev": "Jogador anterior",
   "hide-and-seek.overlay.followNext": "Jogador seguinte",
   "hide-and-seek.overlay.you": "Tu",
-  "hide-and-seek.toast.external": "Agora não, o jogo está a decorrer."
+  "hide-and-seek.toast.external": "Agora não, o jogo está a decorrer.",
+  "hide-and-seek.toast.superseded": "O jogo passou para o teu outro separador. Clica aqui para o trazer de volta.",
+  "hide-and-seek.lobby.mode": "Modo",
+  "hide-and-seek.lobby.modeClassic": "escondidas",
+  "hide-and-seek.lobby.modeManhunt": "caçada",
+  "hide-and-seek.lobby.prey": "Caçado",
+  "hide-and-seek.lobby.preyRandom": "aleatório",
+  "hide-and-seek.overlay.youArePrey": "És a presa — foge",
+  "hide-and-seek.overlay.huntTarget": "Caça {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} aguentou {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} escapou ao fim de {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} abandonou a caçada"
 }

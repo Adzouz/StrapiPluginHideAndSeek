@@ -24,6 +24,7 @@ export const serverNow = () => Date.now() + clockSkew;
 const RETRY_MIN_MS = 2000;
 const RETRY_MAX_MS = 30000;
 const CURSOR_INTERVAL_MS = 40;
+const CATCH_TOAST_MS = 6000;
 
 let socket = null;
 let connecting = false;
@@ -75,8 +76,32 @@ const patchHistory = () => {
   });
 };
 
+/**
+ * Where you are, as the game sees it.
+ *
+ * Usually the pathname, but some screens keep the location in the query string
+ * instead — the Media Library puts the open folder in `folder`/`folderPath`, so
+ * on pathname alone every folder is one room and everyone shows up in all of
+ * them. Only the keys the server nominates count; filters, sort and pagination
+ * are left out on purpose, or two people looking at the same list through
+ * different filters would never find each other.
+ */
+const pageId = () => {
+  const keys = getState().game?.pageQueryKeys ?? [];
+  const params = new URLSearchParams(window.location.search);
+  const query = keys
+    .slice()
+    .sort()
+    .map((key) => [key, params.get(key)])
+    .filter(([, value]) => value !== null)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+
+  return query ? `${window.location.pathname}?${query}` : window.location.pathname;
+};
+
 const reportPage = () => {
-  const path = window.location.pathname;
+  const path = pageId();
 
   if (!socket || path === lastReportedPath) {
     return;
@@ -163,6 +188,68 @@ const onMouseMove = (event) => {
 
 const PLAYING = [STATUS.COUNTDOWN, STATUS.HIDING, STATUS.HUNTING];
 
+const KEEP_ALIVE_MS = 60000;
+
+let lastKeepAliveAt = 0;
+/** Another tab took the game over; this one stays quiet until it is focused. */
+let superseded = false;
+
+/**
+ * How long after losing the socket a hidden tab may reconnect on its own.
+ *
+ * Long enough to ride out a blip — a mid-round disconnection is forfeited after
+ * `forfeitAfterMs` (20s by default) regardless, so nothing is saved by waiting
+ * longer. Short enough that a tab which slept through a handover it was never
+ * told about cannot wake up and take the game off the tab being played in: the
+ * `superseded` packet is only advisory, and a connection that died without
+ * delivering it leaves this tab believing it is still the holder.
+ */
+const RECLAIM_WINDOW_MS = 60000;
+
+/** While in the future, this tab may reconnect without being looked at. */
+let reclaimableUntil = 0;
+
+/**
+ * A hider who has found a good spot stops clicking, and Strapi eventually ends
+ * an idle admin session — getting logged out mid-round, which now also removes
+ * you from the game. A socket carries no HTTP activity, so poll a cheap
+ * authenticated endpoint while a round is running: the admin's fetch client
+ * refreshes the token off the back of it.
+ */
+const keepSessionAlive = () => {
+  // Superseded, not merely disconnected: a tab that has handed the game over
+  // would otherwise go on refreshing the session for a round it is watching
+  // from the outside, for as long as it stays open. A tab that is between
+  // sockets still wants its session, because it is the session the reconnect
+  // is about to need — and the socket dying says nothing about whether HTTP
+  // still works.
+  //
+  // But only while that reconnect is still on the table. A backgrounded tab
+  // that loses its socket past the reclaim window returns early in `connect()`
+  // and never comes back, and nothing expires `game` from the store: no TTL,
+  // no timer, no `pagehide`. So `inGame()` stays true for the life of the tab
+  // and this would renew that admin's session every minute for ever — the
+  // same unbounded ping that was closed for the superseded tab.
+  const strandedWithoutSocket = !socket && Date.now() >= reclaimableUntil;
+
+  if (
+    superseded ||
+    strandedWithoutSocket ||
+    !inGame() ||
+    Date.now() - lastKeepAliveAt < KEEP_ALIVE_MS
+  ) {
+    return;
+  }
+
+  lastKeepAliveAt = Date.now();
+
+  getFetchClient()
+    .get(`/${PLUGIN_ID}/ping`)
+    .catch(() => {
+      /* the reconnect path already handles a dead session */
+    });
+};
+
 const inGame = () => PLAYING.includes(getState().game?.status);
 
 /**
@@ -215,11 +302,15 @@ const handleEvent = (event) => {
       });
     } else if (event.seekerId === playerId) {
       sounds.found();
-      pushToast('good', t('toast.youFound', { name: event.hiderName }));
+      pushToast('good', t('toast.youFound', { name: event.hiderName }), CATCH_TOAST_MS);
     } else {
+      // Every catch is news for the whole room, not just the two involved: it is
+      // how everyone still hiding learns the net is closing.
+      sounds.found();
       pushToast(
-        'neutral',
-        t('toast.someoneFound', { seeker: event.seekerName, hider: event.hiderName })
+        'catch',
+        t('toast.someoneFound', { seeker: event.seekerName, hider: event.hiderName }),
+        CATCH_TOAST_MS
       );
     }
   }
@@ -245,6 +336,15 @@ const setLockedUntil = (next = 0) => {
   window.clearTimeout(unlockTimer);
 
   if (next <= serverNow()) {
+    // An early release — a caught seeker freed, or a hider no longer cornered,
+    // both of which this version can do. `setPage` refuses silently while the
+    // lock holds, but `reportPage` caches the path before it is acknowledged,
+    // so a player who navigated under lockdown is left in a room the server
+    // still believes they are in: invisible where they are, catchable where
+    // they are not. Re-announce the same way the timer branch below does.
+    lastReportedPath = null;
+    reportPage();
+
     return;
   }
 
@@ -261,6 +361,24 @@ const setLockedUntil = (next = 0) => {
 
 const FOLLOW_KEY = 'hide-and-seek:follow';
 const FOLLOW_SETTLE_MS = 1500;
+
+/**
+ * A page id from another client, as a path this tab is willing to navigate to —
+ * or null when it does not resolve to this origin.
+ */
+const localPage = (page) => {
+  if (typeof page !== 'string' || !page.startsWith('/')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(page, window.location.origin);
+
+    return url.origin === window.location.origin ? `${url.pathname}${url.search}` : null;
+  } catch {
+    return null;
+  }
+};
 
 const readFollow = () => {
   try {
@@ -294,11 +412,21 @@ const followTarget = (roster) => {
 
   const target = roster.find((entry) => entry.id === followId);
 
-  if (!target || !target.page) {
+  // A page is self-reported by another client, so it is only ever followed when
+  // it stays on this origin. Resolved rather than prefix-matched: the URL
+  // parser treats `\` as `/` in a relative path, so `/\evil.example` looks like
+  // a local path and is not one. The server refuses to store those at all; this
+  // is the second lock on the same door, because this one does the navigating.
+  const local = localPage(target?.page);
+
+  if (!local) {
     return;
   }
 
-  if (target.page === window.location.pathname) {
+  // Compare against the same thing the server was told, query string included,
+  // or a page whose id carries one never matches and we reload for ever. Both
+  // sides go through the same resolver, so neither can differ by encoding.
+  if (local === localPage(pageId())) {
     followNavigatedAt = 0;
     return;
   }
@@ -315,7 +443,7 @@ const followTarget = (roster) => {
   }
 
   followNavigatedAt = 0;
-  window.location.assign(target.page);
+  window.location.assign(local);
 };
 
 export const cycleFollow = (direction) => {
@@ -344,6 +472,15 @@ export const stopFollowing = () => {
 const handlePeers = ({ peers, you } = {}) => {
   peersRef.current = Array.isArray(peers) ? peers : [];
   ownMarkerRef.current = you?.slowed ? you.position : null;
+
+  // The only clock reading that arrives during a quiet hunt: `state` is sent
+  // on change, so without this the skew every countdown is measured against
+  // goes stale for as long as nothing happens. Before the lockdown, which is
+  // measured against it.
+  if (you?.serverTime) {
+    clockSkew = you.serverTime - Date.now();
+  }
+
   setLockedUntil(you?.lockedUntil ?? 0);
 
   const danger =
@@ -479,9 +616,11 @@ const teardownSocket = () => {
   setLockedUntil(0);
   setState({ connected: false, danger: false });
 
-  // Logged out, not a blip: drop the cached round so no overlay is left
-  // hanging over the login screen. A transient drop keeps its state.
-  if (isAuthRoute()) {
+  // Logged out or handed over, not a blip: drop the cached round so no overlay
+  // is left hanging over the login screen, and so a superseded tab stops
+  // drawing a HUD, dimming links and blocking clicks for a game it is watching
+  // from the outside. A transient drop keeps its state.
+  if (isAuthRoute() || superseded) {
     youSignature = null;
     setState({ game: null, playerId: null, you: null, caughtNotice: null });
   }
@@ -499,6 +638,9 @@ const connectNow = () => {
     return;
   }
 
+  superseded = false;
+  setState({ superseded: false });
+
   window.clearTimeout(retryTimer);
   retryDelay = RETRY_MIN_MS;
   connect();
@@ -513,19 +655,60 @@ const wire = (instance) => {
     syncDismissed(state);
     lastReportedPath = null;
     reportPage();
+    // `away` is a fire-and-forget emit, so any change made while the socket was
+    // down went nowhere, and the server carries the flag across a reconnect
+    // untouched. Without this a hider who tabbed away *after* the drop comes
+    // back marked present, parked at the cursor they left behind — exactly the
+    // unfindable hider `setAway` exists to prevent.
+    setAway(document.hidden);
   });
 
   instance.on('state', (state) => {
     clockSkew = state.serverTime - Date.now();
+    const phaseChanged = state.status !== lastStatus;
+
     setState({ game: state });
 
     syncDismissed(state);
 
     goHomeOnReset(state.status);
+
+    // The lockdown is only ever fed by the `peers` frame, and that frame stops
+    // the instant the hunt ends — so the deadline the server has just zeroed
+    // would live on here, with every link in the admin dead and no pill left
+    // to say why. Outside the hunt there is no lockdown, full stop.
+    if (state.status !== STATUS.HUNTING) {
+      setLockedUntil(0);
+    }
+
+    // `start()` clears everyone's page server-side. Without re-announcing it, a
+    // player who never navigates stays at no page at all: invisible, uncatchable
+    // and credited with surviving.
+    if (phaseChanged) {
+      lastReportedPath = null;
+      reportPage();
+    }
   });
 
   instance.on('peers', handlePeers);
   instance.on('event', handleEvent);
+
+  instance.on('superseded', () => {
+    superseded = true;
+    // The widget has to be able to tell this apart from a dead server: its
+    // disconnected branch says "Connecting / Waiting for the game server…",
+    // and the superseded path deliberately schedules no retry, so that wording
+    // would sit there for ever — outliving the toast that explains it by a
+    // good eight seconds.
+    setState({ superseded: true });
+    // Whatever this tab held, the other one holds now: it has no session to
+    // win back on its own, and must wait to be looked at.
+    reclaimableUntil = 0;
+    pushToast('neutral', t('toast.superseded'), 8000);
+    // Step aside immediately rather than waiting to be cut off, so there is no
+    // window where two tabs are both reporting where this player is.
+    instance.close();
+  });
 
   instance.on('leaderboard', (rows) => {
     setState({ leaderboard: Array.isArray(rows) ? rows : [] });
@@ -533,7 +716,15 @@ const wire = (instance) => {
 
   instance.on('disconnect', () => {
     teardownSocket();
-    scheduleRetry();
+
+    // Reconnecting here would steal the game straight back and leave the two
+    // tabs fighting over it. Wait until this one is focused instead.
+    if (!superseded) {
+      // It held the game until a moment ago, so it may win it back on its own
+      // even while hidden — for as long as that claim is still fresh.
+      reclaimableUntil = Date.now() + RECLAIM_WINDOW_MS;
+      scheduleRetry();
+    }
   });
 
   instance.on('connect_error', () => {
@@ -545,6 +736,19 @@ const wire = (instance) => {
 
 export async function connect() {
   if (socket || connecting) {
+    return;
+  }
+
+  // A background tab must not take the game off the tab being played in, so a
+  // tab that has never held it waits to be looked at — see the focus handlers
+  // below. A tab that was holding it moments ago and simply lost the socket is
+  // a different case entirely: a hider who tabbed away to hide would otherwise
+  // sit out the rest of the round and be forfeited where they stand. That
+  // licence expires, because this tab's belief that it is still the holder is
+  // only as fresh as the last packet it received.
+  if (document.hidden && Date.now() > reclaimableUntil) {
+    scheduleRetry();
+
     return;
   }
 
@@ -615,13 +819,29 @@ export function startClient() {
     reportPage();
     // Picks up a language change made in the profile page without a reload.
     refreshLocale();
+    keepSessionAlive();
   }, 1000);
 
+  // Focusing a tab hands it the game back, taking it from whichever tab holds it.
   window.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       connectNow();
     }
   });
+
+  window.addEventListener('focus', () => connectNow());
+
+  // Focus alone cannot rescue a tab that was superseded while already focused
+  // (a link opened in a background tab does that), so any interaction here
+  // claims the game back — which is what the toast promises.
+  const reclaim = () => {
+    if (superseded) {
+      connectNow();
+    }
+  };
+
+  document.addEventListener('click', reclaim, true);
+  document.addEventListener('keydown', reclaim, true);
 
   connect();
 }

@@ -13,7 +13,7 @@ const run = async () => {
   }
   console.log('safePath from state:', a.state.safePath);
 
-  a.socket.emit('settings', { hideSeconds: 1 });
+  a.socket.emit('settings', { mode: 'classic', preyId: null, hideSeconds: 1 });
   a.socket.emit('ready', { ready: true });
   b.socket.emit('ready', { ready: true });
   await wait(() => a.state.players.filter((p) => p.ready).length === 2, 'ready');
@@ -66,6 +66,9 @@ const run = async () => {
   await sleep(200);
 
   console.log('\n[2] homepage is a safe zone');
+  // The standoff has to lapse first: while locked in, the server refuses page
+  // changes by design, so nobody can walk to the safe zone mid-lockdown.
+  await wait(() => !hider.you || hider.you.lockedUntil < Date.now(), 'lockdown lapses', 25000);
   hider.socket.emit('page', { path: HOME });
   seeker.socket.emit('page', { path: HOME });
   await sleep(600);
@@ -76,6 +79,11 @@ const run = async () => {
   check(hider.you.lockedUntil < Date.now(), 'no new lockdown in the safe zone');
   check(seeker.state.status === 'hunting', 'no catch in the safe zone despite overlapping cursors');
   check(hider.you.slowed === false, 'no slowdown in the safe zone');
+
+  // Page ids now carry query keys; the safe zone is matched on the path alone.
+  hider.socket.emit('page', { path: `${HOME}?folder=1` });
+  await sleep(700);
+  check(hider.you.safe === true, 'still the safe zone with a query string attached');
 
   console.log('\n[3] catch carries survival time and the new role');
   hider.socket.emit('page', { path: SPOT });

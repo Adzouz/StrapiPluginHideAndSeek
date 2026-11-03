@@ -99,7 +99,7 @@ const run = async () => {
   const guest2 = await connectWithToken(player.token, player.email);
   players[2] = guest2;
 
-  seeker.socket.emit('settings', { hideSeconds: 1, seekerCount: 1 });
+  seeker.socket.emit('settings', { mode: 'classic', preyId: null, hideSeconds: 1, seekerCount: 1 });
   players.forEach((c) => c.socket.emit('ready', { ready: true }));
   await wait(() => seeker.state.players.filter((p) => p.ready).length === 3, 'ready');
   await new Promise((r) => seeker.socket.emit('start', {}, r));
@@ -134,6 +134,141 @@ const run = async () => {
 
   const spareOff = await setActive(admin, bystander.id, false);
   check(spareOff.status !== 409, `deactivating a non-player is fine (${spareOff.status})`);
+
+  // The guard runs ahead of Strapi's router, which is where authentication is
+  // composed — so it answers before anyone has proved who they are. A request
+  // with no credentials must get Strapi's 401, not the guard's 409.
+  const anonymous = await api(`/admin/users/${player.id}`, { method: 'DELETE' });
+  check(anonymous.status === 401, `an unauthenticated delete still gets 401 (${anonymous.status})`);
+  check(
+    anonymous.body?.error?.name !== 'HideAndSeekRoundInProgress',
+    'and is answered by Strapi, not by the guard'
+  );
+
+  // And because it cannot tell a real token from a shaped one, even the
+  // refusal an authenticated caller gets is written for a stranger's eyes.
+  check(!JSON.stringify(blocked.body).includes('Throwaway'), 'the refusal names nobody');
+  check(
+    blocked.body?.error?.details?.players === undefined,
+    'and carries no player list to read ids out of'
+  );
+
+  // A matcher reading the raw path sees the escape sequence where the router
+  // sees the decoded id, and waves the delete through.
+  const escaped = String(player.id).replace(/./g, (c) => `%${c.charCodeAt(0).toString(16)}`);
+  const encoded = await api(`/admin/users/${escaped}`, { method: 'DELETE', token: admin });
+  check(encoded.status === 409, `a percent-encoded id is refused too (${encoded.status})`);
+
+  console.log('\nentries somebody is hiding in');
+  const MODEL = 'api::article.article';
+  const OCCUPIED = 'hns-doc-1';
+  const OTHER = 'hns-doc-2';
+  const entryUrl = (id) => `/content-manager/collection-types/${MODEL}/${id}`;
+  const HIDING_SPOT = `/admin${entryUrl(OCCUPIED)}`;
+
+  guest2.socket.emit('page', { path: HIDING_SPOT });
+  await sleep(600);
+
+  const occupied = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
+  check(occupied.status === 409, `deleting an occupied entry refused with ${occupied.status}`);
+  check(
+    occupied.body?.error?.details?.action === 'delete-entry',
+    `refusal names the action: ${occupied.body?.error?.details?.action}`
+  );
+
+  // The path real users take: tick the boxes in the list view and hit delete.
+  // It is also the only branch that depends on a guessed request body shape,
+  // and it fails open if that guess is ever wrong.
+  const bulk = await api(`/content-manager/collection-types/${MODEL}/actions/bulkDelete`, {
+    method: 'POST',
+    token: admin,
+    body: { documentIds: [OTHER, OCCUPIED] },
+  });
+  check(bulk.status === 409, `bulk delete including an occupied entry refused with ${bulk.status}`);
+
+  // Precision: the guard must key on the entry, not merely the model.
+  const neighbour = await api(entryUrl(OTHER), { method: 'DELETE', token: admin });
+  check(
+    neighbour.status !== 409,
+    `another entry of the same model is untouched (${neighbour.status})`
+  );
+
+  // The page is self-reported, so a crafted string must not become a veto over
+  // the whole CMS.
+  guest2.socket.emit('page', { path: `/admin/plugins/x?${MODEL} ${OCCUPIED} ${OTHER}` });
+  await sleep(700);
+  const crafted = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
+  check(crafted.status !== 409, `a crafted page string cannot veto deletions (${crafted.status})`);
+
+  guest2.socket.emit('page', { path: '/admin/plugins/elsewhere' });
+  await sleep(600);
+  const vacated = await api(entryUrl(OCCUPIED), { method: 'DELETE', token: admin });
+  check(
+    vacated.status !== 409,
+    `once they move on, the entry is deletable again (${vacated.status})`
+  );
+
+  console.log('\nMedia Library folders somebody is hiding in');
+  // Folders are the one room type built out of a query string, so the entry
+  // matcher cannot see them. They are also the one place where the two numbers
+  // in the URL come from different counters — `folder` is the row id and
+  // `folderPath` is a chain of `pathId`s — so these folders are created for
+  // real rather than invented, and the ids below are whatever Strapi assigns.
+  const bulkDeleteFolders = (folderIds) =>
+    api('/upload/actions/bulk-delete', { method: 'POST', token: admin, body: { folderIds } });
+
+  const makeFolder = async (name, parent = null) => {
+    const created = await api('/upload/folders', {
+      method: 'POST',
+      token: admin,
+      body: { name: `${name}-${Date.now()}`, parent },
+    });
+
+    if (!created.body?.data?.id) {
+      throw new Error(`create folder: ${created.status} ${JSON.stringify(created.body?.error)}`);
+    }
+
+    return created.body.data;
+  };
+
+  const parentFolder = await makeFolder('hns-parent');
+  const childFolder = await makeFolder('hns-child', parentFolder.id);
+  const unrelated = await makeFolder('hns-unrelated');
+
+  console.log(
+    `   parent id=${parentFolder.id} path=${parentFolder.path} · child id=${childFolder.id} path=${childFolder.path}`
+  );
+
+  guest2.socket.emit('page', {
+    path: `/admin/plugins/upload?folder=${childFolder.id}&folderPath=${childFolder.path}`,
+  });
+  await sleep(700);
+
+  const folder = await bulkDeleteFolders([childFolder.id]);
+  check(folder.status === 409, `deleting an occupied folder refused with ${folder.status}`);
+  check(
+    folder.body?.error?.details?.action === 'delete-folder',
+    `refusal names the action: ${folder.body?.error?.details?.action}`
+  );
+
+  // The one the guard exists for: deleting the parent takes the subtree, and
+  // the hider standing in it, with no mention of their folder in the request.
+  const ancestor = await bulkDeleteFolders([parentFolder.id]);
+  check(
+    ancestor.status === 409,
+    `deleting the folder above it is refused too (${ancestor.status})`
+  );
+
+  const elsewhere = await bulkDeleteFolders([unrelated.id]);
+  check(elsewhere.status === 200, `an unoccupied folder is untouched (${elsewhere.status})`);
+
+  guest2.socket.emit('page', { path: '/admin/plugins/elsewhere' });
+  await sleep(600);
+  const vacatedFolder = await bulkDeleteFolders([parentFolder.id]);
+  check(
+    vacatedFolder.status === 200,
+    `once they move on, the folder is deletable again (${vacatedFolder.status})`
+  );
 
   console.log('\nafter the round');
   seeker.socket.emit('reset');

@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "Koniec rundy",
   "hide-and-seek.error.notEnoughPlayers": "Potrzeba co najmniej 2 gotowych graczy",
   "hide-and-seek.error.roundRunning": "Runda już trwa",
+  "hide-and-seek.error.preyNotReady": "Ścigany gracz nie jest gotowy",
   "hide-and-seek.leaderboard.empty": "Nie rozegrano jeszcze żadnej rundy. Wygraj jedną, a ranking będzie twój.",
   "hide-and-seek.leaderboard.players": "{count} graczy łącznie",
   "hide-and-seek.leaderboard.points": "punkty",
@@ -72,5 +73,16 @@
   "hide-and-seek.overlay.followPrev": "Poprzedni gracz",
   "hide-and-seek.overlay.followNext": "Następny gracz",
   "hide-and-seek.overlay.you": "Ty",
-  "hide-and-seek.toast.external": "Nie w trakcie gry."
+  "hide-and-seek.toast.external": "Nie w trakcie gry.",
+  "hide-and-seek.toast.superseded": "Gra przeniosła się do innej karty. Kliknij tutaj, aby ją odzyskać.",
+  "hide-and-seek.lobby.mode": "Tryb",
+  "hide-and-seek.lobby.modeClassic": "chowany",
+  "hide-and-seek.lobby.modeManhunt": "obława",
+  "hide-and-seek.lobby.prey": "Ścigany",
+  "hide-and-seek.lobby.preyRandom": "losowo",
+  "hide-and-seek.overlay.youArePrey": "Jesteś zwierzyną — uciekaj",
+  "hide-and-seek.overlay.huntTarget": "Ścigaj {name}",
+  "hide-and-seek.overlay.preyCaught": "{name} wytrzymał {time}",
+  "hide-and-seek.overlay.preyEscaped": "{name} uciekł po {time}",
+  "hide-and-seek.overlay.preyLeft": "{name} opuścił pościg"
 }
