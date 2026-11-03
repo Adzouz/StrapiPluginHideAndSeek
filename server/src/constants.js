@@ -35,10 +35,26 @@ const PALETTE = [
   '#9736e8',
 ];
 
+/**
+ * Query parameters that are part of *where you are*, rather than how you are
+ * looking at it. Kept here rather than inline in the config default because
+ * the default must stay `null` — see `config/index.js` — and both the read
+ * site and the Media Library room parser need the same list.
+ */
+const DEFAULT_PAGE_QUERY_KEYS = ['folder', 'folderPath'];
+
 /** Classic hide and seek, or everyone against one. */
 const MODE = {
   CLASSIC: 'classic',
   MANHUNT: 'manhunt',
 };
 
-module.exports = { PLUGIN_ID, SOCKET_PATH, STATUS, ROLE, PALETTE, MODE };
+module.exports = {
+  PLUGIN_ID,
+  SOCKET_PATH,
+  STATUS,
+  ROLE,
+  PALETTE,
+  MODE,
+  DEFAULT_PAGE_QUERY_KEYS,
+};

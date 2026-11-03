@@ -1,6 +1,6 @@
 'use strict';
 
-const { STATUS, ROLE, PALETTE, MODE } = require('../constants');
+const { STATUS, ROLE, PALETTE, MODE, DEFAULT_PAGE_QUERY_KEYS } = require('../constants');
 
 const MUTABLE_SETTINGS = [
   'hideSeconds',
@@ -443,7 +443,15 @@ module.exports = ({ strapi }) => {
       if (Number.isFinite(value) && value > 0) {
         // Upper bounds as well as lower: an unbounded roundSeconds parks the
         // game IN_ROUND forever, which keeps the deletion guards armed forever.
-        current[key] = clampSetting(key, value);
+        //
+        // And a floor of one, because this test reads the value as sent rather
+        // than as stored: `{ roundSeconds: 0.5 }` is positive, floors to 0, and
+        // gives a round whose first tick runs COUNTDOWN, HIDING and HUNTING and
+        // then finishes it. Any connected socket can send that patch — there is
+        // no host — so the floor belongs on this path. The config path is left
+        // alone deliberately: the validator has already bounded it, and the
+        // engine's own fixtures collapse phases to zero on purpose.
+        current[key] = Math.max(1, clampSetting(key, value));
       }
     });
 
@@ -656,10 +664,12 @@ module.exports = ({ strapi }) => {
             left: !prey,
           }
         : null,
-      // The headline number of a manhunt: how long one person lasted.
-      preySurvivedMs: prey
-        ? (prey.caughtAt ?? Date.now()) - (state.huntStartedAt ?? Date.now())
-        : null,
+      // The headline number of a manhunt: how long one person lasted. Null
+      // when there is nothing to measure — a hunt that never opened has no
+      // start to subtract, and `Date.now() - Date.now()` is a reported zero,
+      // not a missing value.
+      preySurvivedMs:
+        prey && state.huntStartedAt ? (prey.caughtAt ?? Date.now()) - state.huntStartedAt : null,
       durationMs: state.startedAt ? Date.now() - state.startedAt : 0,
       survivors: activeHiders().map((p) => ({ id: p.id, name: p.name, color: p.color })),
       scores: [...state.players.values()]
@@ -687,7 +697,17 @@ module.exports = ({ strapi }) => {
         caught: player.caught,
         // Sitting out the round in the safe zone is allowed, but it does not
         // count as surviving — otherwise the homepage would win every game.
-        survived: player.startedAs === ROLE.HIDER && !player.caught && !isSafe(player.page),
+        //
+        // A page is required for the same reason. `peersFor`, `evaluateCatches`,
+        // `evaluateHints` and both deletion guards all filter out a player with
+        // no page, so a socket that emits `ready` and never `page` is dealt in,
+        // unfindable and uncatchable. Nothing obliges a client to report one,
+        // and without this such a player is credited with surviving.
+        survived:
+          player.startedAs === ROLE.HIDER &&
+          !player.caught &&
+          Boolean(player.page) &&
+          !isSafe(player.page),
       }));
 
     emit({ type: 'over', result: state.result, participants });
@@ -883,9 +903,21 @@ module.exports = ({ strapi }) => {
       return true;
     }
 
-    if (!dealt.some((player) => player.role === ROLE.SEEKER)) {
+    if (state.status === STATUS.HUNTING && !dealt.some((player) => player.role === ROLE.SEEKER)) {
       // Everyone doing the hunting has gone: the hiders were never found.
+      //
+      // Only once the hunt has opened. Before that `huntStartedAt` is null, so
+      // a manhunt ended during the countdown or the hiding phase reports the
+      // prey as having survived zero milliseconds — "got away after 0:00", the
+      // exact string `finish` goes out of its way to avoid. A round nobody can
+      // hunt yet is abandoned, not won.
       finish('hiders');
+
+      return true;
+    }
+
+    if (!state.huntStartedAt && !dealt.some((player) => player.role === ROLE.SEEKER)) {
+      reset();
 
       return true;
     }
@@ -1052,7 +1084,7 @@ module.exports = ({ strapi }) => {
      */
     safePath: config().safeZone && !isManhunt() ? adminRoot() : null,
     /** Query params the client should fold into the page it reports. */
-    pageQueryKeys: config().pageQueryKeys ?? [],
+    pageQueryKeys: config().pageQueryKeys ?? DEFAULT_PAGE_QUERY_KEYS,
     /** Manhunt only: who this round is about — secret until the roles are out. */
     preyId: state.status === STATUS.COUNTDOWN ? null : state.preyId,
     huntStartedAt: state.huntStartedAt,
@@ -1083,6 +1115,17 @@ module.exports = ({ strapi }) => {
     const player = state.players.get(playerId);
 
     if (!player || !player.page || state.status !== STATUS.HUNTING) {
+      return [];
+    }
+
+    // The same bar `followRoster` sets, and for the same reason. Being dealt no
+    // role leaves a player SPECTATOR — which is also what somebody who never
+    // readied up looks like, and what anyone swept after a long reload looks
+    // like once they reconnect. Watching is a thing you earn by having been in
+    // the round: the visibility gates below only apply to a seeker, so without
+    // this an abstainer receives live positions for every uncaught hider on
+    // their page. In manhunt the prey is the only hider, so that is the game.
+    if (!player.startedAs) {
       return [];
     }
 
@@ -1303,5 +1346,12 @@ module.exports = ({ strapi }) => {
     peersFor,
     drainEvents,
     playerBySocket,
+    /**
+     * Exported so the ticket controller answers the same admin root the engine
+     * scores against. Reading `admin.path` there instead put the client's
+     * `goHome()` on a URL the server does not serve the admin at, on every
+     * project mounted under a sub-path.
+     */
+    adminRoot,
   };
 };

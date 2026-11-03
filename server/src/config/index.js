@@ -1,6 +1,6 @@
 'use strict';
 
-const { MODE, ROLE } = require('../constants');
+const { MODE, ROLE, DEFAULT_PAGE_QUERY_KEYS } = require('../constants');
 
 module.exports = {
   default: {
@@ -47,8 +47,16 @@ module.exports = {
      * each other regardless of which one they opened. Filters, sort and
      * pagination are deliberately not here: two people browsing the same page
      * with different filters are still in the same place.
+     *
+     * `null`, not the list itself, because Strapi merges plugin config with
+     * lodash `defaultsDeep`, which recurses into arrays index-wise: a default of
+     * `['folder', 'folderPath']` cannot be shortened by an installer, and worse,
+     * `['plugins']` would merge to `['plugins', 'folderPath']` — silently
+     * disarming the folder guard. A null default never joins the merge, so the
+     * configured array arrives whole. The real list is
+     * `DEFAULT_PAGE_QUERY_KEYS`, applied at the read site.
      */
-    pageQueryKeys: ['folder', 'folderPath'],
+    pageQueryKeys: null,
     /** A seeker who has not seen anybody for this long gets a nudge. */
     hintAfterMs: 45000,
     /** How often the nudge picks a fresh target. */
@@ -83,7 +91,36 @@ module.exports = {
     corsOrigin: true,
   },
 
+  /**
+   * Refuses *wrong* values; repairs *out-of-range* ones.
+   *
+   * The distinction decides whether an upgrade boots. Strapi rethrows anything
+   * raised here as `Error regarding hide-and-seek config`, and `stopWithError`
+   * exits the host CMS 1 — so a ceiling that throws turns a working install
+   * into one that will not start, over a number the game is perfectly able to
+   * clamp. Wrong types, unknown enum members and non-positive durations still
+   * throw: there is no sane value to fall back to. Numbers that are merely too
+   * large, too small or fractional are clamped in place, each with one warning
+   * naming the key and the value applied.
+   *
+   * Mutating `config` is load-bearing: `applyUserConfig` assigns this very
+   * object to `plugin.config` immediately after calling the validator, so what
+   * is written here is what the plugin reads for the rest of the process.
+   */
   validator(config = {}) {
+    const warn = (message) => {
+      const logger = globalThis.strapi && globalThis.strapi.log;
+
+      if (logger && typeof logger.warn === 'function') {
+        logger.warn(`[hide-and-seek] ${message}`);
+        return;
+      }
+
+      // The validator runs during plugin load, which is early enough that a
+      // logger is not guaranteed. A dropped warning is worse than a plain one.
+      console.warn(`[hide-and-seek] ${message}`);
+    };
+
     const positive = [
       'countdownSeconds',
       'hideSeconds',
@@ -108,24 +145,47 @@ module.exports = {
     // session from going idle, so each phase needs a ceiling — not only the
     // three the lobby can change. A countdown measured in years is an outage
     // with a timer on it.
-    const ceilings = {
-      countdownSeconds: 60,
-      hideSeconds: 120,
-      roundSeconds: 3600,
-      forfeitAfterMs: 300000,
+    //
+    // Floors matter just as much, and for the same reason. `tickHz` is the only
+    // thing that transitions phases, finishes rounds and sweeps disconnects, so
+    // `tickHz: 0.01` leaves the guards armed a hundred seconds past the end of
+    // the round; below ~4.66e-7 the computed delay overflows Node's 32-bit
+    // timer and `setInterval` clamps to 1ms, giving a 1000Hz loop inside the
+    // host process. And flooring 0.5 yields 0 — a round that ends on the tick
+    // it begins — which is why whole units are floored to at least one.
+    const bounds = {
+      countdownSeconds: { min: 1, max: 60, whole: true },
+      hideSeconds: { min: 1, max: 120, whole: true },
+      roundSeconds: { min: 1, max: 3600, whole: true },
+      seekerCount: { min: 1, max: 50, whole: true },
+      tickHz: { min: 1, max: 60, whole: true },
+      forfeitAfterMs: { max: 300000 },
     };
 
-    Object.entries(ceilings).forEach(([key, max]) => {
-      if (config[key] !== undefined && config[key] > max) {
-        throw new Error(`[hide-and-seek] config.${key} must not exceed ${max}`);
-      }
-    });
+    Object.entries(bounds).forEach(([key, { min, max, whole }]) => {
+      const value = config[key];
 
-    // Whole units only: these are floored on the way in, and flooring 0.5
-    // silently yields 0 — a round that ends on the tick it begins.
-    ['countdownSeconds', 'hideSeconds', 'roundSeconds', 'seekerCount'].forEach((key) => {
-      if (config[key] !== undefined && !Number.isInteger(config[key])) {
-        throw new Error(`[hide-and-seek] config.${key} must be a whole number`);
+      if (value === undefined) {
+        return;
+      }
+
+      let next = value;
+
+      if (whole && !Number.isInteger(next)) {
+        next = Math.floor(next);
+      }
+
+      if (min !== undefined) {
+        next = Math.max(min, next);
+      }
+
+      if (max !== undefined) {
+        next = Math.min(max, next);
+      }
+
+      if (next !== value) {
+        config[key] = next;
+        warn(`config.${key} is ${value}, which is out of range — using ${next}.`);
       }
     });
 
@@ -155,28 +215,44 @@ module.exports = {
       throw new Error("[hide-and-seek] config.mode must be 'classic' or 'manhunt'");
     }
 
-    // socket.io accepts a boolean, a string, an array of strings or a function.
+    // socket.io hands `cors.origin` to the `cors` package by way of engine.io,
+    // which branches on `instanceof RegExp` and walks arrays element-wise — and
+    // Strapi stores plugin config with a plain `config.set`, no clone and no
+    // JSON round-trip, so a RegExp written in `config/plugins.ts` survives to
+    // the socket server intact. Accepted here because it already worked.
+    const isOrigin = (value) =>
+      typeof value === 'boolean' ||
+      typeof value === 'string' ||
+      typeof value === 'function' ||
+      value instanceof RegExp;
+
     if (
       config.corsOrigin !== undefined &&
-      typeof config.corsOrigin !== 'boolean' &&
-      typeof config.corsOrigin !== 'string' &&
-      typeof config.corsOrigin !== 'function' &&
-      !(
-        Array.isArray(config.corsOrigin) &&
-        config.corsOrigin.every((origin) => typeof origin === 'string')
-      )
+      !isOrigin(config.corsOrigin) &&
+      !(Array.isArray(config.corsOrigin) && config.corsOrigin.every(isOrigin))
     ) {
       throw new Error(
-        '[hide-and-seek] config.corsOrigin must be a boolean, a string, an array of strings or a function'
+        '[hide-and-seek] config.corsOrigin must be a boolean, a string, a RegExp, an array of those or a function'
       );
     }
 
-    if (
-      config.pageQueryKeys !== undefined &&
-      (!Array.isArray(config.pageQueryKeys) ||
-        config.pageQueryKeys.some((key) => typeof key !== 'string'))
-    ) {
-      throw new Error('[hide-and-seek] config.pageQueryKeys must be an array of strings');
+    if (config.pageQueryKeys !== undefined && config.pageQueryKeys !== null) {
+      if (
+        !Array.isArray(config.pageQueryKeys) ||
+        config.pageQueryKeys.some((key) => typeof key !== 'string')
+      ) {
+        throw new Error('[hide-and-seek] config.pageQueryKeys must be an array of strings');
+      }
+
+      // Not an error — the list is yours to set — but dropping either key stops
+      // the Media Library folder guard firing, with nothing else to show for it.
+      const missing = DEFAULT_PAGE_QUERY_KEYS.filter((key) => !config.pageQueryKeys.includes(key));
+
+      if (missing.length > 0) {
+        warn(
+          `config.pageQueryKeys omits ${missing.join(' and ')}; the Media Library folder guard will not fire.`
+        );
+      }
     }
 
     if (
@@ -191,10 +267,6 @@ module.exports = {
       ![ROLE.SEEKER, ROLE.SPECTATOR].includes(config.caughtBecome)
     ) {
       throw new Error("[hide-and-seek] config.caughtBecome must be 'seeker' or 'spectator'");
-    }
-
-    if (config.tickHz !== undefined && config.tickHz > 60) {
-      throw new Error('[hide-and-seek] config.tickHz must not exceed 60');
     }
   },
 };
