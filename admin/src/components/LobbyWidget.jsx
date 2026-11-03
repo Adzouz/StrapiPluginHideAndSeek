@@ -312,7 +312,20 @@ const InRound = ({ game, me }) => {
 
 export const LobbyWidget = () => {
   const { formatMessage } = useIntl();
-  const { game, playerId, connected } = useGameStore();
+  const { game, playerId, connected, superseded } = useGameStore();
+
+  // Before the disconnected branch: a superseded tab is disconnected too, and
+  // telling the player the game server is unreachable is both wrong and
+  // permanent — nothing retries, so nothing would ever replace it.
+  if (superseded) {
+    return (
+      <Flex direction="column" gap={2} alignItems="center" justifyContent="center" height="100%">
+        <Typography variant="pi" textColor="neutral600" textAlign="center">
+          {formatMessage(msg('toast.superseded'))}
+        </Typography>
+      </Flex>
+    );
+  }
 
   if (!connected || !game || !playerId) {
     return (

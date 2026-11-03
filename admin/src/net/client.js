@@ -223,7 +223,21 @@ const keepSessionAlive = () => {
   // sockets still wants its session, because it is the session the reconnect
   // is about to need — and the socket dying says nothing about whether HTTP
   // still works.
-  if (superseded || !inGame() || Date.now() - lastKeepAliveAt < KEEP_ALIVE_MS) {
+  //
+  // But only while that reconnect is still on the table. A backgrounded tab
+  // that loses its socket past the reclaim window returns early in `connect()`
+  // and never comes back, and nothing expires `game` from the store: no TTL,
+  // no timer, no `pagehide`. So `inGame()` stays true for the life of the tab
+  // and this would renew that admin's session every minute for ever — the
+  // same unbounded ping that was closed for the superseded tab.
+  const strandedWithoutSocket = !socket && Date.now() >= reclaimableUntil;
+
+  if (
+    superseded ||
+    strandedWithoutSocket ||
+    !inGame() ||
+    Date.now() - lastKeepAliveAt < KEEP_ALIVE_MS
+  ) {
     return;
   }
 
@@ -322,6 +336,15 @@ const setLockedUntil = (next = 0) => {
   window.clearTimeout(unlockTimer);
 
   if (next <= serverNow()) {
+    // An early release — a caught seeker freed, or a hider no longer cornered,
+    // both of which this version can do. `setPage` refuses silently while the
+    // lock holds, but `reportPage` caches the path before it is acknowledged,
+    // so a player who navigated under lockdown is left in a room the server
+    // still believes they are in: invisible where they are, catchable where
+    // they are not. Re-announce the same way the timer branch below does.
+    lastReportedPath = null;
+    reportPage();
+
     return;
   }
 
@@ -616,6 +639,7 @@ const connectNow = () => {
   }
 
   superseded = false;
+  setState({ superseded: false });
 
   window.clearTimeout(retryTimer);
   retryDelay = RETRY_MIN_MS;
@@ -671,6 +695,12 @@ const wire = (instance) => {
 
   instance.on('superseded', () => {
     superseded = true;
+    // The widget has to be able to tell this apart from a dead server: its
+    // disconnected branch says "Connecting / Waiting for the game server…",
+    // and the superseded path deliberately schedules no retry, so that wording
+    // would sit there for ever — outliving the toast that explains it by a
+    // good eight seconds.
+    setState({ superseded: true });
     // Whatever this tab held, the other one holds now: it has no session to
     // win back on its own, and must wait to be looked at.
     reclaimableUntil = 0;
