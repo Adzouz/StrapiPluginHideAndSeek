@@ -50,6 +50,24 @@ describe('admin user targets', () => {
     assert.deepEqual(targetsFor(ctx('DELETE', '/admin/users/%37')).ids, ['7']);
   });
 
+  // `@koa/router` defaults `sensitive` to false and Strapi never overrides it,
+  // so the admin's own routes match case-insensitively and authorise off
+  // `ctx.state.route` — a matcher that reads raw `ctx.path` case-sensitively
+  // sees nothing while the request is routed, authorised and executed.
+  it('reads a case-varied path the way the router will', () => {
+    assert.deepEqual(targetsFor(ctx('DELETE', '/ADMIN/USERS/7')).ids, ['7']);
+    assert.deepEqual(targetsFor(ctx('POST', '/Admin/Users/Batch-Delete', { ids: [1] })).ids, [1]);
+    assert.deepEqual(
+      entryTargetsFor(ctx('DELETE', '/Content-Manager/Collection-Types/api::a.a/doc-1')),
+      { model: 'api::a.a', documentIds: ['doc-1'] },
+      'and keeps the captures in the case they arrived in'
+    );
+    assert.deepEqual(
+      folderTargetsFor(ctx('POST', '/UPLOAD/ACTIONS/BULK-DELETE', { folderIds: [3] })),
+      [3]
+    );
+  });
+
   it('survives a malformed escape rather than throwing', () => {
     assert.deepEqual(targetsFor(ctx('DELETE', '/admin/users/%ZZ')).ids, ['%ZZ']);
   });

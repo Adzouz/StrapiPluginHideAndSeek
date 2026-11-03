@@ -12,7 +12,7 @@ export const { STATUS, ROLE, MODE } = require('../../server/src/constants.js');
  * are collapsed to zero seconds and a catch lands on the first tick, so a whole
  * round is a handful of synchronous calls.
  */
-export const makeGame = ({ config = {}, adminPath = '/admin' } = {}) => {
+export const makeGame = ({ config = {}, adminPath = '/admin', absoluteUrl = null } = {}) => {
   const cfg = {
     ...configModule.default,
     countdownSeconds: 0,
@@ -31,6 +31,14 @@ export const makeGame = ({ config = {}, adminPath = '/admin' } = {}) => {
 
         if (key === 'admin.path') {
           return adminPath;
+        }
+
+        // Answered, not omitted. `adminRoot()` prefers this key precisely
+        // because `admin.path` has the part it shares with `server.url`
+        // stripped out, so a stub that never returns it leaves the whole
+        // sub-path branch dead and every test running on the fallback.
+        if (key === 'admin.absoluteUrl') {
+          return absoluteUrl ?? fallback;
         }
 
         return fallback;
