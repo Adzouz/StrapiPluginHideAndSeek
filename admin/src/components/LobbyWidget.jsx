@@ -16,7 +16,7 @@ import {
 
 import { msg } from '../i18n';
 import { send } from '../net/client';
-import { ROLE, STATUS } from '../pluginId';
+import { MODE, ROLE, STATUS } from '../pluginId';
 import { useGameStore } from '../store';
 
 const HIDE_DURATIONS = [10, 15, 20, 30, 45];
@@ -58,7 +58,56 @@ const Setting = ({ label, first, value, onChange, children }) => (
   </>
 );
 
-/** One row rather than three stacked ones — the player list needs the space. */
+/**
+ * Which game, and — in a manhunt — who the room is after. One row rather than
+ * three stacked ones: the player list needs the space.
+ */
+const ModeRow = ({ settings, players }) => {
+  const { formatMessage } = useIntl();
+  const isManhunt = settings.mode === MODE.MANHUNT;
+
+  // A prey picked here is always in the room, because the options *are* the
+  // room. A configured one is whatever `config/plugins.js` says, and that user
+  // may be disconnected or deleted — in which case no option matches, the
+  // select renders blank, and blank is indistinguishable from "Random", which
+  // is the one thing it is not. Fall back to Random, which is also what the
+  // server will do with it.
+  const preyInRoom = players.some((player) => String(player.id) === String(settings.preyId));
+
+  return (
+    <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
+      <Setting
+        label={formatMessage(msg('lobby.mode'))}
+        first
+        value={settings.mode ?? MODE.CLASSIC}
+        onChange={(value) => send('settings', { mode: value })}
+      >
+        <SingleSelectOption value={MODE.CLASSIC}>
+          {formatMessage(msg('lobby.modeClassic'))}
+        </SingleSelectOption>
+        <SingleSelectOption value={MODE.MANHUNT}>
+          {formatMessage(msg('lobby.modeManhunt'))}
+        </SingleSelectOption>
+      </Setting>
+
+      {isManhunt ? (
+        <Setting
+          label={formatMessage(msg('lobby.prey'))}
+          value={preyInRoom ? settings.preyId : ''}
+          onChange={(value) => send('settings', { preyId: value === '' ? null : value })}
+        >
+          <SingleSelectOption value="">{formatMessage(msg('lobby.preyRandom'))}</SingleSelectOption>
+          {players.map((player) => (
+            <SingleSelectOption key={player.id} value={player.id}>
+              {player.name}
+            </SingleSelectOption>
+          ))}
+        </Setting>
+      ) : null}
+    </Flex>
+  );
+};
+
 const Settings = ({ settings }) => {
   const { formatMessage } = useIntl();
 
@@ -195,6 +244,7 @@ const Lobby = ({ game, me }) => {
     <Shell
       header={
         <>
+          <ModeRow settings={game.settings} players={game.players} />
           <Settings settings={game.settings} />
           <Divider />
         </>
@@ -272,7 +322,20 @@ const InRound = ({ game, me }) => {
 
 export const LobbyWidget = () => {
   const { formatMessage } = useIntl();
-  const { game, playerId, connected } = useGameStore();
+  const { game, playerId, connected, superseded } = useGameStore();
+
+  // Before the disconnected branch: a superseded tab is disconnected too, and
+  // telling the player the game server is unreachable is both wrong and
+  // permanent — nothing retries, so nothing would ever replace it.
+  if (superseded) {
+    return (
+      <Flex direction="column" gap={2} alignItems="center" justifyContent="center" height="100%">
+        <Typography variant="pi" textColor="neutral600" textAlign="center">
+          {formatMessage(msg('toast.superseded'))}
+        </Typography>
+      </Flex>
+    );
+  }
 
   if (!connected || !game || !playerId) {
     return (

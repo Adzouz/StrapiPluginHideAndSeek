@@ -1,6 +1,6 @@
 {
   "name": "strapi-plugin-hide-and-seek",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Play hide and seek with your teammates inside the Strapi admin panel.",
   "keywords": [
     "strapi",
@@ -39,7 +39,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "strapi-plugin build",
@@ -52,8 +53,11 @@
     "test:deletion": "node tests/deletion.mjs",
     "test:disconnect": "node tests/disconnect.mjs",
     "test:e2e": "node tests/e2e.mjs",
+    "test:manhunt": "node tests/manhunt.mjs",
     "test:mechanics": "node tests/mechanics.mjs",
     "test:spectator": "node tests/spectator.mjs",
+    "test:tabs": "node tests/tabs.mjs",
+    "test:unit": "node --test tests/unit/*.test.mjs",
     "verify": "strapi-plugin verify",
     "watch": "strapi-plugin watch",
     "watch:link": "strapi-plugin watch:link"
@@ -95,7 +99,6 @@
   "peerDependencies": {
     "@strapi/design-system": "^2.0.0",
     "@strapi/icons": "^2.0.0",
-    "@strapi/sdk-plugin": "^5.0.0",
     "@strapi/strapi": "^5.13.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",

@@ -1,8 +1,15 @@
 'use strict';
 
-const { STATUS, ROLE, PALETTE } = require('../constants');
+const { STATUS, ROLE, PALETTE, MODE, DEFAULT_PAGE_QUERY_KEYS } = require('../constants');
 
-const MUTABLE_SETTINGS = ['hideSeconds', 'roundSeconds', 'caughtBecome', 'seekerCount'];
+const MUTABLE_SETTINGS = [
+  'hideSeconds',
+  'roundSeconds',
+  'caughtBecome',
+  'seekerCount',
+  'mode',
+  'preyId',
+];
 
 /**
  * How long a disconnected player keeps their seat between rounds. Long enough
@@ -10,6 +17,13 @@ const MUTABLE_SETTINGS = ['hideSeconds', 'roundSeconds', 'caughtBecome', 'seeker
  * that someone who closed the tab is gone before anyone wonders.
  */
 const DISCONNECT_GRACE_MS = 5000;
+
+/** Ceilings for the settings the lobby can change, in their own units. */
+const SETTING_LIMITS = {
+  hideSeconds: 120,
+  roundSeconds: 3600,
+  seekerCount: 50,
+};
 
 /** Phases where a round is under way and can therefore be abandoned. */
 const IN_ROUND = [STATUS.COUNTDOWN, STATUS.HIDING, STATUS.HUNTING];
@@ -19,6 +33,106 @@ const clamp01 = (n) => Math.min(1, Math.max(0, n));
 const CENTRE = { x: 0.5, y: 0.5 };
 
 const normalisePath = (path) => String(path ?? '').replace(/\/+$/, '') || '/';
+
+/** The pathname half of a page id, dropping the room-defining query string. */
+const pathOf = (page) => normalisePath(String(page ?? '').split('?')[0]);
+
+const CONTENT_ENTRY =
+  /^\/content-manager\/(collection-types|single-types)\/([^/?#]+)(?:\/([^/?#]+))?/;
+
+/**
+ * Any origin will do: the only thing being asked of the parser is whether the
+ * string stays on the one it is resolved against.
+ */
+const PARSE_BASE = 'http://hide-and-seek.invalid';
+
+/**
+ * A page id as this server is willing to store it, or null.
+ *
+ * `page` is whatever a client said it was, and it is echoed to other clients
+ * and handed to a spectator's browser to navigate to. Prefix-matching is not
+ * enough to keep it on this origin: the URL parser treats `\` as `/` in a
+ * relative path, so `/\evil.example` passes a `startsWith('/')` check and then
+ * resolves to another host entirely.
+ */
+const localPage = (page) => {
+  if (typeof page !== 'string' || !page.startsWith('/')) {
+    return null;
+  }
+
+  try {
+    const url = new URL(page, PARSE_BASE);
+
+    return url.origin === PARSE_BASE ? `${url.pathname}${url.search}` : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The content entry a page is showing, or null.
+ *
+ * Parsed structurally rather than by substring: `page` is whatever the client
+ * said it was, so a crafted string stuffed with model uids and document ids
+ * could otherwise veto deletions all over the CMS. The admin mount point is
+ * stripped first rather than matched as "one segment", so a project that mounts
+ * the admin at `/` or at a nested path is guarded too.
+ */
+const entryOf = (page, adminPath = '/admin') => {
+  const path = pathOf(page);
+  const base = adminPath === '/' ? '' : adminPath;
+
+  if (base && !path.startsWith(`${base}/`)) {
+    return null;
+  }
+
+  const match = CONTENT_ENTRY.exec(path.slice(base.length));
+
+  if (!match) {
+    return null;
+  }
+
+  const decode = (value) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  };
+
+  return {
+    single: match[1] === 'single-types',
+    model: decode(match[2]),
+    documentId: match[3] ? decode(match[3]) : null,
+  };
+};
+
+/**
+ * The Media Library room a page is in: the open folder's id, and its path.
+ *
+ * The two are deliberately kept apart. `folder` is the folder's row id, while
+ * `folderPath` is built from `pathId` — a counter of its own that the upload
+ * plugin increments per folder created. They agree until the first folder is
+ * deleted and then drift for ever, so comparing one against the other matches
+ * the wrong folders in both directions. Both are `pageQueryKeys` by default,
+ * so both are part of the page id.
+ */
+const roomOf = (page) => {
+  const query = String(page ?? '').split('?')[1];
+
+  if (!query) {
+    return null;
+  }
+
+  const params = new URLSearchParams(query);
+  const id = params.get('folder');
+
+  if (!id) {
+    return null;
+  }
+
+  return { id: String(id), path: params.get('folderPath') || null };
+};
 
 /**
  * The whole game lives in memory on a single Strapi node: a round is short,
@@ -38,6 +152,9 @@ module.exports = ({ strapi }) => {
     huntStartedAt: null,
     lastTickAt: Date.now(),
     result: null,
+    /** Manhunt only: the player everybody is hunting this round. */
+    preyId: null,
+    preySnapshot: null,
     players: new Map(),
     /** `${seekerId}:${hiderId}` -> timestamp the cursor lock started. */
     holds: new Map(),
@@ -53,10 +170,36 @@ module.exports = ({ strapi }) => {
     state.events.push(event);
   };
 
+  /**
+   * A numeric setting as the game is willing to hold it: whole, and under its
+   * ceiling. Non-numeric settings (mode, caughtBecome, preyId) pass through.
+   */
+  const clampSetting = (key, value) => {
+    // Player ids are strings everywhere in here, but an installer writing
+    // `preyId: 3` in config/plugins.ts writes a number — and `'3' === 3` is
+    // false, which would make the named prey unfindable for ever.
+    if (key === 'preyId') {
+      return value === null || value === undefined ? null : String(value);
+    }
+
+    if (!Number.isFinite(value)) {
+      return value;
+    }
+
+    return Math.min(Math.floor(value), SETTING_LIMITS[key] ?? Number.MAX_SAFE_INTEGER);
+  };
+
   const settings = () => {
     if (!state.settings) {
       const cfg = config();
-      state.settings = MUTABLE_SETTINGS.reduce((acc, key) => ({ ...acc, [key]: cfg[key] }), {});
+
+      // Clamped on the way in, not just on the lobby path: a configured
+      // roundSeconds of 999999 would otherwise park the game IN_ROUND for
+      // eleven days, and keep the deletion guards armed for every one of them.
+      state.settings = MUTABLE_SETTINGS.reduce(
+        (acc, key) => ({ ...acc, [key]: clampSetting(key, cfg[key]) }),
+        {}
+      );
     }
     return state.settings;
   };
@@ -105,10 +248,40 @@ module.exports = ({ strapi }) => {
   const playerBySocket = (socketId) =>
     [...state.players.values()].find((p) => p.sockets.has(socketId));
 
-  /** The admin homepage: a truce. No lockdown, no catching, nothing. */
-  const safePath = () => normalisePath(strapi.config.get('admin.path', '/admin'));
+  /**
+   * Where this project mounts the admin, as the *browser* sees it. Also the
+   * homepage: a truce.
+   *
+   * Not `admin.path`: Strapi strips the part it has in common with
+   * `server.url` from that, so a project served under a sub-path reports
+   * `/admin` while the pathname a client reports is `/cms/admin`. The absolute
+   * URL is the one that keeps the prefix.
+   */
+  const adminRoot = () => {
+    const absolute = strapi.config.get('admin.absoluteUrl');
 
-  const isSafe = (page) => config().safeZone && normalisePath(page) === safePath();
+    if (typeof absolute === 'string') {
+      try {
+        return normalisePath(new URL(absolute).pathname);
+      } catch {
+        /* fall back to the relative path below */
+      }
+    }
+
+    return normalisePath(strapi.config.get('admin.path', '/admin'));
+  };
+
+  const isManhunt = () => settings().mode === MODE.MANHUNT;
+
+  /**
+   * Neutral ground makes no sense when the whole room is hunting one person:
+   * they would simply stand on the homepage and run out the clock.
+   */
+  // `Boolean(page)` first: pathOf(null) is '/', which is the admin root itself
+  // on a project whose admin is mounted there — so a player with no page at all
+  // would be scored as having sat out the round in the safe zone.
+  const isSafe = (page) =>
+    Boolean(page) && config().safeZone && !isManhunt() && pathOf(page) === adminRoot();
 
   /** A hider sharing a page with a seeker, outside the safe zone, is slowed. */
   const isSlowed = (player) =>
@@ -128,7 +301,32 @@ module.exports = ({ strapi }) => {
    */
   const betweenRounds = () => state.status === STATUS.LOBBY || state.status === STATUS.OVER;
 
+  /**
+   * A hider with no page is not in the round in any sense that matters: every
+   * catch, hint and lockdown path filters them out, so they cannot be found.
+   * Counting them here would hold the round open to the full `roundSeconds`,
+   * win it for the hiders on the clock, and list them in `result.survivors`
+   * beside the `survived: false` that `finish()` gives them for the same
+   * reason — one result object asserting both.
+   *
+   * `start()` clears every page, so this is legitimately empty for a moment
+   * after a round opens — which is why it is not what ends a round. "No hiders
+   * left" means every hider was *caught*, and that is `uncaughtHiders()`.
+   * Ending on this list instead would hand the seekers a win in the gap before
+   * anybody has re-announced where they are.
+   */
   const activeHiders = () =>
+    [...state.players.values()].filter(
+      (p) => p.role === ROLE.HIDER && !p.caught && Boolean(p.page)
+    );
+
+  /**
+   * Who is still in, findable or not. Only the round-ending checks want this:
+   * a hider with no page cannot be caught, so counting them as gone would end
+   * the round early, and counting them as present is what holds it to the full
+   * `roundSeconds`. The second is the safer error.
+   */
+  const uncaughtHiders = () =>
     [...state.players.values()].filter((p) => p.role === ROLE.HIDER && !p.caught);
 
   /* ------------------------------------------------------------------ *
@@ -146,6 +344,7 @@ module.exports = ({ strapi }) => {
     player.sockets.add(socketId);
     player.connected = true;
     player.disconnectedAt = null;
+
     touch();
 
     return player;
@@ -163,13 +362,33 @@ module.exports = ({ strapi }) => {
     if (player.sockets.size === 0) {
       player.connected = false;
       player.disconnectedAt = Date.now();
-      player.page = null;
       player.ready = false;
+
+      // Their page is the room the lockdown is holding them in, so while it is
+      // running the page outlives the socket. Dropping it would make a reload
+      // an escape from the standoff — and would strand them on their way back,
+      // because `setPage` then refuses to take the page they return on and
+      // they end up with none at all: invisible, uncatchable, and credited
+      // with surviving a round they spent on a loading screen.
+      if (state.status !== STATUS.HUNTING || Date.now() >= player.lockedUntil) {
+        player.page = null;
+      }
     }
 
     touch();
 
     return player;
+  };
+
+  /**
+   * Drops a departed player from the lobby's "Hunted" choice. Left behind, it
+   * is a select holding a value that matches no option, and a manhunt that
+   * quietly deals somebody else instead.
+   */
+  const releasePrey = (playerId) => {
+    if (settings().preyId === playerId) {
+      settings().preyId = null;
+    }
   };
 
   /**
@@ -189,6 +408,7 @@ module.exports = ({ strapi }) => {
     }
 
     state.players.delete(playerId);
+    releasePrey(playerId);
     touch();
   };
 
@@ -226,10 +446,37 @@ module.exports = ({ strapi }) => {
         return;
       }
 
+      if (key === 'mode') {
+        if (Object.values(MODE).includes(patch[key])) {
+          current[key] = patch[key];
+        }
+        return;
+      }
+
+      if (key === 'preyId') {
+        // Only ever an id we already know: this value is echoed to every client
+        // in publicState, so an arbitrary client-supplied string would be stored
+        // and re-broadcast to the whole room.
+        const id = patch[key] === null || patch[key] === undefined ? null : String(patch[key]);
+
+        current[key] = id && state.players.has(id) ? id : null;
+        return;
+      }
+
       const value = Number(patch[key]);
 
       if (Number.isFinite(value) && value > 0) {
-        current[key] = Math.floor(value);
+        // Upper bounds as well as lower: an unbounded roundSeconds parks the
+        // game IN_ROUND forever, which keeps the deletion guards armed forever.
+        //
+        // And a floor of one, because this test reads the value as sent rather
+        // than as stored: `{ roundSeconds: 0.5 }` is positive, floors to 0, and
+        // gives a round whose first tick runs COUNTDOWN, HIDING and HUNTING and
+        // then finishes it. Any connected socket can send that patch — there is
+        // no host — so the floor belongs on this path. The config path is left
+        // alone deliberately: the validator has already bounded it, and the
+        // engine's own fixtures collapse phases to zero on purpose.
+        current[key] = Math.max(1, clampSetting(key, value));
       }
     });
 
@@ -249,9 +496,43 @@ module.exports = ({ strapi }) => {
     }
 
     const cfg = settings();
-    const seekerCount = Math.min(Math.max(1, cfg.seekerCount), candidates.length - 1);
-    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
-    const seekers = new Set(shuffled.slice(0, seekerCount).map((p) => p.id));
+
+    // Naming somebody who has not readied up used to fall through to a random
+    // draw: the lobby said one person was hunted, the round hunted another, and
+    // the player named on screen was dealt spectator without a word.
+    if (cfg.mode === MODE.MANHUNT && cfg.preyId && !candidates.some((p) => p.id === cfg.preyId)) {
+      return { ok: false, code: 'preyNotReady' };
+    }
+
+    // Fisher-Yates: `sort(() => Math.random() - 0.5)` leaves element 0 heavily
+    // biased towards whoever joined first, and manhunt depends on a fair draw.
+    const shuffled = [...candidates];
+
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    let seekers;
+
+    if (cfg.mode === MODE.MANHUNT) {
+      // One named player against the room: everybody else hunts.
+      const prey = candidates.find((player) => player.id === cfg.preyId) ?? shuffled[0];
+
+      state.preyId = prey.id;
+      // Snapshotted because a prey who quits mid-round is swept from the
+      // roster, and the result card would lose the only number it is about.
+      state.preySnapshot = { id: prey.id, name: prey.name };
+      seekers = new Set(candidates.filter((player) => player.id !== prey.id).map((p) => p.id));
+    } else {
+      state.preyId = null;
+      state.preySnapshot = null;
+
+      const seekerCount = Math.min(Math.max(1, cfg.seekerCount), candidates.length - 1);
+
+      seekers = new Set(shuffled.slice(0, seekerCount).map((p) => p.id));
+    }
 
     state.players.forEach((player) => {
       player.caught = false;
@@ -261,6 +542,7 @@ module.exports = ({ strapi }) => {
       player.pageAt = 0;
       player.hint = null;
       player.lastSightingAt = 0;
+      player.lockedUntil = 0;
       player.gamePos = { ...player.cursor };
 
       if (!player.connected || !player.ready) {
@@ -292,6 +574,7 @@ module.exports = ({ strapi }) => {
     state.phaseEndsAt = null;
     state.roundEndsAt = null;
     state.startedAt = null;
+    state.preyId = null;
     state.result = null;
     state.holds.clear();
 
@@ -302,6 +585,7 @@ module.exports = ({ strapi }) => {
       player.page = null;
       player.pageAt = 0;
       player.hint = null;
+      player.lockedUntil = 0;
     });
 
     emit({ type: 'phase', status: state.status });
@@ -314,8 +598,12 @@ module.exports = ({ strapi }) => {
 
   const setPage = (playerId, page) => {
     const player = state.players.get(playerId);
+    // Refused here rather than filtered on the way out: this value is
+    // broadcast to other clients and a spectator's browser navigates to it, so
+    // anything that does not stay on this origin never enters the game at all.
+    const next = localPage(page);
 
-    if (!player || typeof page !== 'string' || player.page === page) {
+    if (!player || !next || player.page === next) {
       return;
     }
 
@@ -326,7 +614,7 @@ module.exports = ({ strapi }) => {
       return;
     }
 
-    player.page = page.slice(0, 512);
+    player.page = next.slice(0, 512);
     player.pageAt = Date.now();
     player.lastMoveAt = Date.now();
 
@@ -385,8 +673,28 @@ module.exports = ({ strapi }) => {
     state.status = STATUS.OVER;
     state.phaseEndsAt = null;
     state.roundEndsAt = null;
+    const prey = state.preyId ? state.players.get(state.preyId) : null;
+    const preyName = prey?.name ?? state.preySnapshot?.name ?? null;
+
     state.result = {
       winner,
+      mode: settings().mode,
+      prey: preyName
+        ? {
+            id: state.preyId,
+            name: preyName,
+            // Quitting is not escaping: a prey who left was not caught, but
+            // they did not survive either.
+            caught: prey ? prey.caught : false,
+            left: !prey,
+          }
+        : null,
+      // The headline number of a manhunt: how long one person lasted. Null
+      // when there is nothing to measure — a hunt that never opened has no
+      // start to subtract, and `Date.now() - Date.now()` is a reported zero,
+      // not a missing value.
+      preySurvivedMs:
+        prey && state.huntStartedAt ? (prey.caughtAt ?? Date.now()) - state.huntStartedAt : null,
       durationMs: state.startedAt ? Date.now() - state.startedAt : 0,
       survivors: activeHiders().map((p) => ({ id: p.id, name: p.name, color: p.color })),
       scores: [...state.players.values()]
@@ -414,7 +722,17 @@ module.exports = ({ strapi }) => {
         caught: player.caught,
         // Sitting out the round in the safe zone is allowed, but it does not
         // count as surviving — otherwise the homepage would win every game.
-        survived: player.startedAs === ROLE.HIDER && !player.caught && !isSafe(player.page),
+        //
+        // A page is required for the same reason. `peersFor`, `evaluateCatches`,
+        // `evaluateHints` and both deletion guards all filter out a player with
+        // no page, so a socket that emits `ready` and never `page` is dealt in,
+        // unfindable and uncatchable. Nothing obliges a client to report one,
+        // and without this such a player is credited with surviving.
+        survived:
+          player.startedAs === ROLE.HIDER &&
+          !player.caught &&
+          Boolean(player.page) &&
+          !isSafe(player.page),
       }));
 
     emit({ type: 'over', result: state.result, participants });
@@ -427,6 +745,11 @@ module.exports = ({ strapi }) => {
     hider.caught = true;
     hider.caughtAt = at;
     hider.lockedUntil = 0;
+    // The standoff is what the lock was for, and the standoff is over. Leaving
+    // the seeker pinned in a room they have just emptied is the opposite of a
+    // reward for winning it — and outside manhunt nothing else clears the lock
+    // until the whole lockdownMs has run.
+    seeker.lockedUntil = 0;
     hider.role = settings().caughtBecome === ROLE.SEEKER ? ROLE.SEEKER : ROLE.SPECTATOR;
     seeker.foundCount += 1;
     seeker.lastSightingAt = at;
@@ -485,6 +808,34 @@ module.exports = ({ strapi }) => {
 
   const evaluateLockdowns = (at) => {
     const { lockdownMs } = config();
+
+    // The lockdown exists to force a standoff, so it lifts the moment there is
+    // no standoff left: the other side was caught, dropped out, or — in manhunt
+    // — simply walked out, which the prey is allowed to do. Either way, a
+    // player left pinned in a room they are alone in has been removed from the
+    // game by somebody else's exit. It cuts both ways: a hider frozen by a
+    // seeker who closed their tab is the same unfairness as a seeker frozen by
+    // a hider they just caught. `catchPlayer` frees the one who made the catch
+    // in the same tick; this frees everyone else left standing in the room.
+    state.players.forEach((player) => {
+      if (player.lockedUntil <= at) {
+        return;
+      }
+
+      const opponents =
+        player.role === ROLE.SEEKER
+          ? activeHiders()
+          : [...state.players.values()].filter((other) => other.role === ROLE.SEEKER);
+
+      const stillCornered = opponents.some(
+        (other) => other.id !== player.id && other.connected && other.page === player.page
+      );
+
+      if (!stillCornered) {
+        player.lockedUntil = 0;
+      }
+    });
+
     const seekers = [...state.players.values()].filter(
       (p) => p.role === ROLE.SEEKER && p.connected && p.page
     );
@@ -505,7 +856,13 @@ module.exports = ({ strapi }) => {
           }
 
           seeker.lockedUntil = Math.max(seeker.lockedUntil, until);
-          hider.lockedUntil = Math.max(hider.lockedUntil, until);
+
+          // In manhunt the prey keeps their legs: pinned in a room with a dozen
+          // hunters they would never get out. The hunters are still locked,
+          // which is what stops the swarm from simply taking turns.
+          if (!(isManhunt() && config().preyEscapesLockdown)) {
+            hider.lockedUntil = Math.max(hider.lockedUntil, until);
+          }
         });
     });
   };
@@ -571,14 +928,26 @@ module.exports = ({ strapi }) => {
       return true;
     }
 
-    if (!dealt.some((player) => player.role === ROLE.SEEKER)) {
+    if (state.status === STATUS.HUNTING && !dealt.some((player) => player.role === ROLE.SEEKER)) {
       // Everyone doing the hunting has gone: the hiders were never found.
+      //
+      // Only once the hunt has opened. Before that `huntStartedAt` is null, so
+      // a manhunt ended during the countdown or the hiding phase reports the
+      // prey as having survived zero milliseconds — "got away after 0:00", the
+      // exact string `finish` goes out of its way to avoid. A round nobody can
+      // hunt yet is abandoned, not won.
       finish('hiders');
 
       return true;
     }
 
-    if (state.status === STATUS.HUNTING && activeHiders().length === 0) {
+    if (!state.huntStartedAt && !dealt.some((player) => player.role === ROLE.SEEKER)) {
+      reset();
+
+      return true;
+    }
+
+    if (state.status === STATUS.HUNTING && uncaughtHiders().length === 0) {
       finish('seekers');
 
       return true;
@@ -647,6 +1016,7 @@ module.exports = ({ strapi }) => {
       }
 
       state.players.delete(player.id);
+      releasePrey(player.id);
       touch();
     });
   };
@@ -682,6 +1052,16 @@ module.exports = ({ strapi }) => {
     // dropped out mid-round need clearing out.
     sweepDisconnected(at);
 
+    // `over` is a screen, not a state to be stuck in. Once everyone who played
+    // has gone there is no result left for anybody to read, and the next admin
+    // to open the panel would otherwise be handed a full-screen results card
+    // for a game they were never in.
+    if (state.status === STATUS.OVER && state.players.size === 0) {
+      reset();
+
+      return;
+    }
+
     if (IN_ROUND.includes(state.status) && endIfNobodyLeft()) {
       return;
     }
@@ -695,7 +1075,7 @@ module.exports = ({ strapi }) => {
     evaluateCatches(at);
     evaluateHints(at);
 
-    if (activeHiders().length === 0) {
+    if (uncaughtHiders().length === 0) {
       finish('seekers');
       return;
     }
@@ -722,8 +1102,16 @@ module.exports = ({ strapi }) => {
     settings: settings(),
     /** Exposed so the client can scale the lockdown countdown bar. */
     lockdownMs: config().lockdownMs,
-    /** The homepage path, so the client can badge the safe zone. */
-    safePath: config().safeZone ? safePath() : null,
+    /**
+     * The homepage path, so the client can badge the safe zone — and so the
+     * hint highlighter knows which link not to point at. Null in manhunt,
+     * where `isSafe` is false and the homepage is a hiding spot like any other.
+     */
+    safePath: config().safeZone && !isManhunt() ? adminRoot() : null,
+    /** Query params the client should fold into the page it reports. */
+    pageQueryKeys: config().pageQueryKeys ?? DEFAULT_PAGE_QUERY_KEYS,
+    /** Manhunt only: who this round is about — secret until the roles are out. */
+    preyId: state.status === STATUS.COUNTDOWN ? null : state.preyId,
     huntStartedAt: state.huntStartedAt,
     result: state.result,
     players: [...state.players.values()].map((player) => ({
@@ -752,6 +1140,17 @@ module.exports = ({ strapi }) => {
     const player = state.players.get(playerId);
 
     if (!player || !player.page || state.status !== STATUS.HUNTING) {
+      return [];
+    }
+
+    // The same bar `followRoster` sets, and for the same reason. Being dealt no
+    // role leaves a player SPECTATOR — which is also what somebody who never
+    // readied up looks like, and what anyone swept after a long reload looks
+    // like once they reconnect. Watching is a thing you earn by having been in
+    // the round: the visibility gates below only apply to a seeker, so without
+    // this an abstainer receives live positions for every uncaught hider on
+    // their page. In manhunt the prey is the only hider, so that is the game.
+    if (!player.startedAs) {
       return [];
     }
 
@@ -814,7 +1213,15 @@ module.exports = ({ strapi }) => {
    * who are already out of the round.
    */
   const followRoster = (player) => {
-    if (!player || player.role !== ROLE.SPECTATOR || state.status !== STATUS.HUNTING) {
+    // `startedAs` is the difference between somebody who was knocked out and
+    // somebody who simply never readied up — the latter is not a spectator and
+    // must not be handed every player's live position.
+    if (
+      !player ||
+      !player.startedAs ||
+      player.role !== ROLE.SPECTATOR ||
+      state.status !== STATUS.HUNTING
+    ) {
       return null;
     }
 
@@ -870,6 +1277,77 @@ module.exports = ({ strapi }) => {
       .map((player) => ({ id: player.id, name: player.name }));
   };
 
+  /**
+   * Players currently standing on a content-manager page for one of these
+   * documents. Used to refuse deleting an entry somebody is hiding in: the
+   * deletion succeeds on the server but their tab keeps showing the old page,
+   * leaving them at an address nobody else can reach.
+   */
+  const occupantsOf = ({ model, documentIds = [] }) => {
+    if (!IN_ROUND.includes(state.status) || !model) {
+      return [];
+    }
+
+    const wanted = documentIds.map((id) => String(id));
+
+    return [...state.players.values()]
+      .filter((player) => player.startedAs && player.page)
+      .filter((player) => {
+        const entry = entryOf(player.page, adminRoot());
+
+        if (!entry || entry.model !== model) {
+          return false;
+        }
+
+        // A single type has no document id: being on its page is enough.
+        return wanted.length === 0 ? entry.single : wanted.includes(String(entry.documentId));
+      })
+      .map((player) => ({ id: player.id, name: player.name }));
+  };
+
+  /**
+   * Players standing in one of these Media Library folders, or anywhere under
+   * them. Deleting a folder deletes its whole subtree, so a hider two folders
+   * down is stranded just as surely as one in the folder itself.
+   *
+   * Takes folders already resolved to `{ id, path }`, because only the database
+   * knows a folder's path and the two numbers in a Media Library URL are not
+   * interchangeable. A folder with no path still matches on its own id, which
+   * is the common case — the caller is free to pass what it has.
+   */
+  const occupantsOfFolders = (folders = []) => {
+    if (!IN_ROUND.includes(state.status) || folders.length === 0) {
+      return [];
+    }
+
+    const wanted = folders.map((folder) => ({
+      id: folder?.id === undefined || folder?.id === null ? null : String(folder.id),
+      path: typeof folder?.path === 'string' && folder.path ? folder.path : null,
+    }));
+
+    const covers = (folder, room) => {
+      if (folder.id !== null && folder.id === room.id) {
+        return true;
+      }
+
+      if (folder.path === null || room.path === null) {
+        return false;
+      }
+
+      // Their room is the folder itself, or somewhere in the subtree under it.
+      return room.path === folder.path || room.path.startsWith(`${folder.path}/`);
+    };
+
+    return [...state.players.values()]
+      .filter((player) => player.startedAs && player.page)
+      .filter((player) => {
+        const room = roomOf(player.page);
+
+        return Boolean(room) && wanted.some((folder) => covers(folder, room));
+      })
+      .map((player) => ({ id: player.id, name: player.name }));
+  };
+
   const drainEvents = () => state.events.splice(0, state.events.length);
 
   return {
@@ -887,9 +1365,18 @@ module.exports = ({ strapi }) => {
     tick,
     publicState,
     playersInRound,
+    occupantsOf,
+    occupantsOfFolders,
     viewFor,
     peersFor,
     drainEvents,
     playerBySocket,
+    /**
+     * Exported so the ticket controller answers the same admin root the engine
+     * scores against. Reading `admin.path` there instead put the client's
+     * `goHome()` on a URL the server does not serve the admin at, on every
+     * project mounted under a sub-path.
+     */
+    adminRoot,
   };
 };

@@ -27,6 +27,7 @@
   "hide-and-seek.status.over": "라운드 종료",
   "hide-and-seek.error.notEnoughPlayers": "준비된 플레이어가 최소 2명 필요합니다",
   "hide-and-seek.error.roundRunning": "이미 라운드가 진행 중입니다",
+  "hide-and-seek.error.preyNotReady": "표적 플레이어가 준비되지 않았습니다",
   "hide-and-seek.leaderboard.empty": "아직 플레이한 라운드가 없습니다. 한 판 이기면 이 순위표는 당신 것입니다.",
   "hide-and-seek.leaderboard.players": "전체 {count}명",
   "hide-and-seek.leaderboard.points": "점수",
@@ -72,5 +73,16 @@
   "hide-and-seek.overlay.followPrev": "이전 플레이어",
   "hide-and-seek.overlay.followNext": "다음 플레이어",
   "hide-and-seek.overlay.you": "나",
-  "hide-and-seek.toast.external": "게임 중에는 열 수 없습니다."
+  "hide-and-seek.toast.external": "게임 중에는 열 수 없습니다.",
+  "hide-and-seek.toast.superseded": "게임이 다른 탭으로 이동했습니다. 여기를 클릭하면 돌아옵니다.",
+  "hide-and-seek.lobby.mode": "모드",
+  "hide-and-seek.lobby.modeClassic": "숨바꼭질",
+  "hide-and-seek.lobby.modeManhunt": "추격전",
+  "hide-and-seek.lobby.prey": "표적",
+  "hide-and-seek.lobby.preyRandom": "무작위",
+  "hide-and-seek.overlay.youArePrey": "당신이 표적입니다 — 도망치세요",
+  "hide-and-seek.overlay.huntTarget": "{name}을(를) 추격하세요",
+  "hide-and-seek.overlay.preyCaught": "{name} 님이 {time} 동안 버텼습니다",
+  "hide-and-seek.overlay.preyEscaped": "{name} 님이 {time} 만에 달아났습니다",
+  "hide-and-seek.overlay.preyLeft": "{name} 님이 추격에서 빠졌습니다"
 }

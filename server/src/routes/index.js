@@ -10,6 +10,12 @@ module.exports = {
         handler: 'game.ticket',
         config: { policies: [] },
       },
+      {
+        method: 'GET',
+        path: '/ping',
+        handler: 'game.ping',
+        config: { policies: [] },
+      },
     ],
   },
 };

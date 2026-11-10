@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { t } from '../i18n';
 import { cycleFollow, dismissResults, serverNow } from '../net/client';
-import { ROLE, STATUS } from '../pluginId';
+import { MODE, ROLE, STATUS } from '../pluginId';
 import { getState, setState, toggleMuted, useGameStore } from '../store';
 import { createGhostLayer } from './ghosts';
 import { guardExternalLinks, releaseExternalLinks } from './external';
@@ -55,14 +55,25 @@ const GhostLayer = () => {
 };
 
 /** Always on, on every page: you should never have to remember what you are. */
-const StatusPill = ({ role, safe }) => (
-  <>
-    <div className={`hns-pill hns-pill--${role ?? ROLE.SPECTATOR}`}>
-      {`${roleIcon[role] ?? roleIcon[ROLE.SPECTATOR]} ${youAreLabel(role)}`}
-    </div>
-    {safe ? <div className="hns-pill hns-pill--safe">{`🛟 ${t('overlay.safeZone')}`}</div> : null}
-  </>
-);
+const StatusPill = ({ role, safe, manhunt, isPrey, preyName }) => {
+  let label = youAreLabel(role);
+  let icon = roleIcon[role] ?? roleIcon[ROLE.SPECTATOR];
+
+  if (manhunt && isPrey) {
+    label = t('overlay.youArePrey');
+    icon = '🎯';
+  } else if (manhunt && role === ROLE.SEEKER && preyName) {
+    label = t('overlay.huntTarget', { name: preyName });
+    icon = '🔦';
+  }
+
+  return (
+    <>
+      <div className={`hns-pill hns-pill--${role ?? ROLE.SPECTATOR}`}>{`${icon} ${label}`}</div>
+      {safe ? <div className="hns-pill hns-pill--safe">{`🛟 ${t('overlay.safeZone')}`}</div> : null}
+    </>
+  );
+};
 
 const HintPill = ({ path, matched }) => (
   <div className="hns-pill hns-pill--hint">
@@ -207,6 +218,22 @@ const HidingBanner = ({ game, now }) => (
   </div>
 );
 
+/**
+ * The headline of a manhunt result. A prey who closed their tab neither escaped
+ * nor was caught, and has no survival time to print — without a branch of their
+ * own the card used to announce they "got away after 0:00".
+ */
+const manhuntHeadline = (result) => {
+  if (result.prey.left) {
+    return t('overlay.preyLeft', { name: result.prey.name });
+  }
+
+  return t(result.prey.caught ? 'overlay.preyCaught' : 'overlay.preyEscaped', {
+    name: result.prey.name,
+    time: formatClock(Math.round((result.preySurvivedMs ?? 0) / 1000)),
+  });
+};
+
 const Results = ({ game, me }) => {
   const { result } = game;
   const won =
@@ -217,9 +244,11 @@ const Results = ({ game, me }) => {
     <div className="hns-fullscreen hns-fullscreen--soft">
       <div className="hns-card">
         <div className="hns-title" style={{ marginBottom: 4 }}>
-          {result.winner === 'seekers'
-            ? `🔦 ${t('overlay.seekersWin')}`
-            : `🥷 ${t('overlay.hidersWin')}`}
+          {result.mode === MODE.MANHUNT && result.prey
+            ? manhuntHeadline(result)
+            : result.winner === 'seekers'
+              ? `🔦 ${t('overlay.seekersWin')}`
+              : `🥷 ${t('overlay.hidersWin')}`}
         </div>
         <div className="hns-sub" style={{ marginBottom: 16 }}>
           {`${t(won ? 'overlay.youMadeIt' : 'overlay.betterLuck')} ${t('overlay.roundLasted', {
@@ -319,14 +348,21 @@ export const Overlay = () => {
     };
   }, [hintPath, safePath]);
 
+  // A toast outlives the round it belongs to: "the game moved to your other
+  // tab" is shown precisely when this tab has just stopped having one, and it
+  // is the only thing telling the player how to get it back.
+  const toastNode = toast ? (
+    <div className={`hns-toast hns-toast--${toast.kind}`}>{toast.text}</div>
+  ) : null;
+
   if (!game || !playerId) {
-    return null;
+    return toastNode;
   }
 
   const me = game.players.find((player) => player.id === playerId);
 
   if (!me) {
-    return null;
+    return toastNode;
   }
 
   const hidingStartedAt = game.phaseEndsAt
@@ -359,7 +395,13 @@ export const Overlay = () => {
 
       {showPills ? (
         <div className="hns-topcentre">
-          <StatusPill role={me.role} safe={you?.safe} />
+          <StatusPill
+            role={me.role}
+            safe={you?.safe}
+            manhunt={game.settings.mode === MODE.MANHUNT}
+            isPrey={game.preyId === me.id}
+            preyName={game.players.find((p) => p.id === game.preyId)?.name}
+          />
           {lockedUntil > now ? (
             <Lockdown lockedUntil={lockedUntil} lockdownMs={game.lockdownMs ?? 4000} now={now} />
           ) : null}
@@ -377,7 +419,7 @@ export const Overlay = () => {
         <Results game={game} me={me} />
       ) : null}
 
-      {toast ? <div className={`hns-toast hns-toast--${toast.kind}`}>{toast.text}</div> : null}
+      {toastNode}
     </>
   );
 };

@@ -51,28 +51,51 @@ const setup = ({ strapi }) => {
     const player = game.join(socket.data.user, socket.id);
 
     socket.data.playerId = player.id;
+
+    // One tab per player. With two open, both report a page and the server only
+    // keeps the last one — so you stand wherever your *other* tab happens to be,
+    // which is how people ended up hiding on pages they had already navigated
+    // away from (or deleted). The newest tab takes over; the old one is told why.
+    [...player.sockets]
+      .filter((id) => id !== socket.id)
+      .forEach((id) => {
+        const previous = io.sockets.sockets.get(id);
+
+        if (!previous) {
+          return;
+        }
+
+        previous.emit('superseded');
+        // Closing in the same tick tears the transport down before the packet is
+        // written, so the old tab would just go quiet with no explanation.
+        setTimeout(() => previous.disconnect(true), 250);
+      });
     socket.emit('hello', { playerId: player.id, state: game.publicState() });
     sendLeaderboard(socket);
 
-    socket.on('page', (payload = {}) => {
-      game.setPage(player.id, payload.path);
-    });
+    /**
+     * `(payload = {})` defaults on `undefined` and nothing else, so one
+     * `socket.emit('page', null)` from any authenticated admin's console makes
+     * `payload.path` a TypeError. socket.io dispatches listeners inside a bare
+     * `process.nextTick`, its only try/catch is around the decoder, and neither
+     * Strapi nor this plugin registers an `uncaughtException` handler — so the
+     * throw takes the whole CMS down. Every payload handler goes through here.
+     */
+    const onPayload = (event, handler) => {
+      socket.on(event, (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
 
-    socket.on('cursor', (payload = {}) => {
-      game.setCursor(player.id, payload.x, payload.y);
-    });
+        handler(payload);
+      });
+    };
 
-    socket.on('away', (payload = {}) => {
-      game.setAway(player.id, payload.away);
-    });
-
-    socket.on('ready', (payload = {}) => {
-      game.setReady(player.id, payload.ready);
-    });
-
-    socket.on('settings', (payload = {}) => {
-      game.updateSettings(payload);
-    });
+    onPayload('page', (payload) => game.setPage(player.id, payload.path));
+    onPayload('cursor', (payload) => game.setCursor(player.id, payload.x, payload.y));
+    onPayload('away', (payload) => game.setAway(player.id, payload.away));
+    onPayload('ready', (payload) => game.setReady(player.id, payload.ready));
+    onPayload('settings', (payload) => game.updateSettings(payload));
 
     socket.on('start', (_payload, ack) => {
       const result = game.start();
@@ -98,14 +121,37 @@ const setup = ({ strapi }) => {
   });
 
   let lastVersion = -1;
+  let failures = 0;
 
-  loop = setInterval(
-    () => {
+  /** A deterministic throw fires 20x/s; log the first, then one in this many. */
+  const LOG_EVERY = 200;
+
+  /**
+   * Everything the game does happens in here, 20 times a second, on a timer
+   * with nothing above it. An exception escaping this callback is an uncaught
+   * exception in the host's process — a game bug would take the whole CMS
+   * down with it. Log it and keep ticking instead.
+   */
+  const step = () => {
+    try {
       game.tick();
 
+      // Consecutive, not cumulative. Without this the counter is a lifetime
+      // total: one transient throw leaves it at 1 and silences the next 198,
+      // however far apart and whatever they are, so a once-per-round bug goes
+      // unlogged for the life of the process after its first appearance. A
+      // deterministic throw at 20Hz has no clean tick to reset on, which is
+      // the flood LOG_EVERY exists for.
+      failures = 0;
+
       if (game.state.version !== lastVersion) {
+        // Recorded only once the frame is actually out: marking it sent first
+        // means a throw in publicState() drops that state for good, and every
+        // client sits on stale state until something else bumps the version.
+        const payload = game.publicState();
+
+        io.emit('state', payload);
         lastVersion = game.state.version;
-        io.emit('state', game.publicState());
       }
 
       game.drainEvents().forEach((event) => {
@@ -136,9 +182,23 @@ const setup = ({ strapi }) => {
         // Carries the player's own lockdown deadline alongside what they can see.
         socket.volatile.emit('peers', game.viewFor(socket.data.playerId));
       });
-    },
-    Math.round(1000 / cfg.tickHz)
-  );
+    } catch (error) {
+      failures += 1;
+
+      // `error` is whatever was thrown, which need not be an Error at all —
+      // reading .stack off a thrown null would throw again, this time with
+      // nothing to catch it, which is the crash this block exists to prevent.
+      // The log is throttled because a deterministic throw happens 20 times a
+      // second, and a flood that fills the disk is its own outage.
+      if (failures === 1 || failures % LOG_EVERY === 0) {
+        strapi.log.error(
+          `[hide-and-seek] tick failed (${failures}x): ${error?.stack ?? error?.message ?? String(error)}`
+        );
+      }
+    }
+  };
+
+  loop = setInterval(step, Math.round(1000 / cfg.tickHz));
 
   strapi.log.info(`[hide-and-seek] real-time server listening on ${SOCKET_PATH}`);
 };
