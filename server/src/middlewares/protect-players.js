@@ -175,13 +175,23 @@ const BEARER = /^bearer\s+(\S+)$/i;
  *
  * Testing the *shape* of the header is not enough — `Bearer x` has the shape.
  * The token is verified and its session checked against the store, so only a
- * caller who could have made the request anyway learns anything from the
- * refusal. Note that moving this to `strapi.server.api('admin').use()` would
- * not help: router-level middleware still runs before the layer's policies, so
+ * caller holding a live admin session learns anything from the refusal. Note
+ * that moving this to `strapi.server.api('admin').use()` would not help:
+ * router-level middleware still runs before the layer's policies, so
  * `ctx.state.user` is unset there too.
  *
- * On a Strapi old enough to have no session manager the header shape is all
- * there is; the guard keeps working, and the oracle is no worse than it was.
+ * That is authentication, not authorisation: the policies that decide whether
+ * this caller may touch *this* model or folder are inside the router, behind
+ * this middleware, so the refusal tells any admin with any session that a
+ * given entry or folder is occupied — including on models they have no rights
+ * on. Occupancy is not a secret worth a round trip through the router, but it
+ * is a disclosure, and it is written down in the README.
+ *
+ * `strapi.sessionManager` arrived in 5.24 and the peer range admits 5.13, so
+ * on an older host there is no way to tell a real token from `Bearer x`. The
+ * guard switches itself off there rather than answer an anonymous caller: the
+ * cost is that a delete goes through mid-round, which is the behaviour without
+ * this plugin at all.
  */
 const authenticated = async (strapi, ctx) => {
   const match = BEARER.exec(ctx.request.header.authorization ?? '');
@@ -191,7 +201,7 @@ const authenticated = async (strapi, ctx) => {
   }
 
   if (typeof strapi.sessionManager !== 'function') {
-    return true;
+    return false;
   }
 
   try {
