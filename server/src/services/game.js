@@ -301,7 +301,32 @@ module.exports = ({ strapi }) => {
    */
   const betweenRounds = () => state.status === STATUS.LOBBY || state.status === STATUS.OVER;
 
+  /**
+   * A hider with no page is not in the round in any sense that matters: every
+   * catch, hint and lockdown path filters them out, so they cannot be found.
+   * Counting them here would hold the round open to the full `roundSeconds`,
+   * win it for the hiders on the clock, and list them in `result.survivors`
+   * beside the `survived: false` that `finish()` gives them for the same
+   * reason — one result object asserting both.
+   *
+   * `start()` clears every page, so this is legitimately empty for a moment
+   * after a round opens — which is why it is not what ends a round. "No hiders
+   * left" means every hider was *caught*, and that is `uncaughtHiders()`.
+   * Ending on this list instead would hand the seekers a win in the gap before
+   * anybody has re-announced where they are.
+   */
   const activeHiders = () =>
+    [...state.players.values()].filter(
+      (p) => p.role === ROLE.HIDER && !p.caught && Boolean(p.page)
+    );
+
+  /**
+   * Who is still in, findable or not. Only the round-ending checks want this:
+   * a hider with no page cannot be caught, so counting them as gone would end
+   * the round early, and counting them as present is what holds it to the full
+   * `roundSeconds`. The second is the safer error.
+   */
+  const uncaughtHiders = () =>
     [...state.players.values()].filter((p) => p.role === ROLE.HIDER && !p.caught);
 
   /* ------------------------------------------------------------------ *
@@ -922,7 +947,7 @@ module.exports = ({ strapi }) => {
       return true;
     }
 
-    if (state.status === STATUS.HUNTING && activeHiders().length === 0) {
+    if (state.status === STATUS.HUNTING && uncaughtHiders().length === 0) {
       finish('seekers');
 
       return true;
@@ -1050,7 +1075,7 @@ module.exports = ({ strapi }) => {
     evaluateCatches(at);
     evaluateHints(at);
 
-    if (activeHiders().length === 0) {
+    if (uncaughtHiders().length === 0) {
       finish('seekers');
       return;
     }

@@ -590,6 +590,39 @@ describe('a finished round', () => {
     assert.equal(scored(game, hider.id).survived, false, 'invisible is not the same as alive');
   });
 
+  // The `survived` flag and the `survivors` list were computed off two
+  // different predicates, so the same round said both things about one player:
+  // `survived: false` on their participant record, and their name in the list
+  // of who made it.
+  it('leaves a hider it did not credit out of the survivors too', () => {
+    const game = makeGame();
+    const hider = endIt(game);
+    const over = game.drainEvents().find((event) => event.type === 'over');
+
+    assert.equal(hider.page, null);
+    assert.deepEqual(
+      over.result.survivors.map((survivor) => survivor.id),
+      [],
+      'the list and the flag have to agree'
+    );
+  });
+
+  // The page gate belongs on who can be *found*, not on who is still in. Every
+  // page is cleared when a round opens, so reading the findable list to decide
+  // whether anybody is left hands the seekers the round in the gap before the
+  // clients have re-announced where they are.
+  it('does not hand the seekers a win before anybody has reported a page', () => {
+    const game = makeGame();
+    const [seeker, hider] = seat(game, 2);
+
+    game.start();
+    deal(game, { seekers: [seeker.id], hiders: [hider.id] });
+    openTheHunt(game);
+
+    assert.equal(hider.page, null);
+    assert.equal(game.state.status, STATUS.HUNTING, 'the round is still being played');
+  });
+
   it('does not outlive everybody who played it', () => {
     const game = makeGame();
     const [seeker, hider] = seat(game, 2);
