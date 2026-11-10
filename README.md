@@ -283,9 +283,10 @@ export default {
 | `tickHz`              | `20`        | Server tick and position broadcast rate.                                                                                               |
 | `corsOrigin`          | `true`      | socket.io CORS origin. `true` reflects the request origin.                                                                             |
 
-`mode`, `preyId`, `caughtBecome`, `hideSeconds`, `roundSeconds` and
-`seekerCount` can also be changed from the lobby widget between rounds, without
-a restart. A lobby change lasts until the server restarts; the configured value
+`mode`, `preyId`, `caughtBecome`, `hideSeconds` and `roundSeconds` can also be
+changed from the lobby widget between rounds, without a restart. `seekerCount`
+is accepted over the same channel but has no control in the widget, so it can
+only be set in the config. A lobby change lasts until the server restarts; the configured value
 is what it starts from.
 
 #### What is capped, and what happens when you exceed it
@@ -346,8 +347,21 @@ The refusal says only that somebody is in the way — a count, never a name or a
 id. The guard runs as a Koa middleware mounted in `bootstrap()`, which is before
 Strapi's router exists, so it authenticates the caller itself: the bearer token
 is verified against the admin session store, and a request that fails is passed
-straight through to the 401 it was going to get. Nothing is disclosed to a
-caller who could not have made the request anyway.
+straight through to the 401 it was going to get.
+
+Two limits worth knowing:
+
+- **Authenticated is not authorised.** Strapi's permission policies live inside
+  the router, behind this middleware, so the 409 goes out before anything has
+  checked whether this caller may touch this target. Any admin with a live
+  session can therefore learn that a given entry or Media Library folder is
+  currently occupied, including on models they have no rights on. What leaks is
+  occupancy, never who or what.
+- **It needs Strapi 5.24 or newer.** The session store the token is checked
+  against arrived in 5.24. On 5.13–5.23 there is no way to tell a real token
+  from a token-shaped string, so the guard switches itself off entirely rather
+  than answer an anonymous caller — deletes go through mid-round, exactly as
+  they would without this plugin.
 
 Where somebody is standing is **self-reported**. The page a player occupies is
 whatever their browser emitted over the socket; the server has no independent

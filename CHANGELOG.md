@@ -56,6 +56,19 @@ old values for 0.2.0's feel.
 
 ### Fixed
 
+- **A round no longer says a player both survived it and did not.** The
+  `survived` flag on a participant was gated on having reported a page; the
+  `survivors` list on the same result object was not, so a client that readied
+  up and never said where it was appeared in one and was denied by the other.
+  Both now read the same list. Who is still _in_ a round — which is what ends
+  it — is counted separately, because every page is cleared when a round opens.
+- **A throw in the game loop is logged again once a clean tick has gone by.**
+  The throttle counter was a lifetime total rather than a consecutive one, so
+  after a single transient failure the next 198 were dropped whatever they were
+  and however far apart.
+- **A configured `preyId` naming somebody who is not in the room now shows as
+  Random**, which is what the server will do with it, rather than as a blank
+  select indistinguishable from it.
 - **A percent-encoded path no longer walks past the deletion guards.** Koa's
   router decodes a route parameter before the controller sees it; the guards
   read the raw path, so `DELETE /admin/users/%37` was user 7 to Strapi and an
@@ -95,8 +108,9 @@ old values for 0.2.0's feel.
   admin session once a minute for as long as it stayed open.
 - **A backgrounded tab can reconnect.** A hider who tabbed away to hide and then
   lost the socket could never reconnect, and was forfeited where they stood. The
-  licence to reconnect unseen expires after a minute, so a tab that slept
-  through a handover cannot wake up and take the game off the tab in use.
+  licence to reconnect unseen expires after a minute, which bounds — rather
+  than removes — the case of a tab that slept through a handover it was never
+  told about and wakes up believing it still holds the game.
 - **A reconnect re-announces whether the tab is in the background**, so a hider
   who tabbed away after losing the socket comes back parked and findable rather
   than frozen at a stale cursor.
@@ -111,8 +125,9 @@ old values for 0.2.0's feel.
   it no longer returns player names, and a request with no bearer token is
   passed through to the 401 it was going to get. **Response-shape change for
   anyone parsing it:** `error.details.players` is gone and the message no
-  longer names anyone. `error.details.action` is unchanged. What a caller with
-  a token-shaped header can still infer is written down in the README.
+  longer names anyone. `error.details.action` is unchanged. What the guard
+  does and does not protect against is written down in the README, under
+  "What the deletion guard actually covers".
 - **A throw in the game loop cannot throw again while being logged**, and is
   rate-limited rather than written twenty times a second for ever. A state
   frame is marked sent only once it has been sent.
@@ -163,6 +178,17 @@ old values for 0.2.0's feel.
 
 ### Changed
 
+- **The deletion guard needs Strapi 5.24 or newer and switches itself off
+  below it.** It runs ahead of the router, so it authenticates callers itself
+  against the admin session store — which arrived in 5.24. On 5.13–5.23 a
+  token-shaped header could not be told from a real one, and answering it would
+  have made the guard an anonymous oracle for whether an entry or folder is
+  occupied; the guard now declines to answer at all there. Deletes go through
+  mid-round on those versions, exactly as they do without this plugin. Note that
+  even on 5.24+ the check is authentication, not authorisation: permission
+  policies run after this middleware, so any admin with a live session can learn
+  that a target is occupied. The README says so under "What the deletion guard
+  actually covers".
 - `mode` and `preyId` joined the settings the lobby can change between rounds.
 - `mode`, `preyEscapesLockdown` and `corsOrigin` are now validated at boot.
   `preyEscapesLockdown: 'false'` used to turn the exemption on.
