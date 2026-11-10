@@ -136,6 +136,14 @@ const setup = ({ strapi }) => {
     try {
       game.tick();
 
+      // Consecutive, not cumulative. Without this the counter is a lifetime
+      // total: one transient throw leaves it at 1 and silences the next 198,
+      // however far apart and whatever they are, so a once-per-round bug goes
+      // unlogged for the life of the process after its first appearance. A
+      // deterministic throw at 20Hz has no clean tick to reset on, which is
+      // the flood LOG_EVERY exists for.
+      failures = 0;
+
       if (game.state.version !== lastVersion) {
         // Recorded only once the frame is actually out: marking it sent first
         // means a throw in publicState() drops that state for good, and every
