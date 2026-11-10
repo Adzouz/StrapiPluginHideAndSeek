@@ -58,11 +58,21 @@ const Setting = ({ label, first, value, onChange, children }) => (
   </>
 );
 
-/** One row rather than three stacked ones — the player list needs the space. */
-/** Which game, and — in a manhunt — who the room is after. */
+/**
+ * Which game, and — in a manhunt — who the room is after. One row rather than
+ * three stacked ones: the player list needs the space.
+ */
 const ModeRow = ({ settings, players }) => {
   const { formatMessage } = useIntl();
   const isManhunt = settings.mode === MODE.MANHUNT;
+
+  // A prey picked here is always in the room, because the options *are* the
+  // room. A configured one is whatever `config/plugins.js` says, and that user
+  // may be disconnected or deleted — in which case no option matches, the
+  // select renders blank, and blank is indistinguishable from "Random", which
+  // is the one thing it is not. Fall back to Random, which is also what the
+  // server will do with it.
+  const preyInRoom = players.some((player) => String(player.id) === String(settings.preyId));
 
   return (
     <Flex gap={2} wrap="nowrap" alignItems="center" paddingBottom={2}>
@@ -83,7 +93,7 @@ const ModeRow = ({ settings, players }) => {
       {isManhunt ? (
         <Setting
           label={formatMessage(msg('lobby.prey'))}
-          value={settings.preyId ?? ''}
+          value={preyInRoom ? settings.preyId : ''}
           onChange={(value) => send('settings', { preyId: value === '' ? null : value })}
         >
           <SingleSelectOption value="">{formatMessage(msg('lobby.preyRandom'))}</SingleSelectOption>
